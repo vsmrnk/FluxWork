@@ -113,6 +113,18 @@ export default async function TodayPage() {
 
   const up = metrics.deltaPct != null && metrics.deltaPct >= 0;
 
+  // Projects-table totals (footer row) — tracked + earnings across all projects.
+  let projTrackedSeconds = 0;
+  let projEarnings = 0;
+  for (const p of list) {
+    const r = rollupByProject.get(p.id);
+    const bill = r?.billable_seconds ?? 0;
+    const client = p.client_id ? clientById.get(p.client_id) : null;
+    const rate = p.rate ?? client?.default_rate ?? 0;
+    projTrackedSeconds += r?.total_seconds ?? 0;
+    projEarnings += (bill / 3600) * rate;
+  }
+
   return (
     <div className="page">
       {/* Header — title, live status pill, primary action */}
@@ -159,7 +171,7 @@ export default async function TodayPage() {
       <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         {/* Projected earnings */}
         <div
-          className="panel p-6 md:p-7 flex flex-col"
+          className="panel p-6 md:p-7 flex flex-col justify-between gap-6"
           style={{
             background:
               "radial-gradient(620px 300px at 10% 120%, var(--gold-dim), transparent 60%), var(--paper-2)",
@@ -169,36 +181,42 @@ export default async function TodayPage() {
             <span className="h-1.5 w-1.5 rounded-full bg-gold inline-block" />
             Projected earnings · this week
           </div>
-          <div
-            className="serif text-ink leading-none mt-3 inline-block"
-            style={{ fontSize: "clamp(2.75rem, 5vw, 4.25rem)" }}
-          >
-            {formatMoney(metrics.thisWeek.earnings, cur)}
-            <span
-              className="block mt-2 h-0.5 w-16 rounded-full"
-              style={{ background: "var(--brass)" }}
-            />
-          </div>
-          <div className="num text-sm text-ink-2 mt-4">
-            <b className="text-ink font-semibold">{billHours.toFixed(1)} h</b> billable · avg{" "}
-            {formatMoney(billHours > 0 ? metrics.thisWeek.earnings / billHours : 0, cur)}/hr
-          </div>
-          {metrics.deltaPct != null ? (
-            <div className="mt-3 inline-flex items-center gap-2 text-sm">
+
+          <div>
+            <div
+              className="serif text-ink leading-none inline-block"
+              style={{ fontSize: "clamp(2.75rem, 5vw, 4.25rem)" }}
+            >
+              {formatMoney(metrics.thisWeek.earnings, cur)}
               <span
-                className="num font-semibold"
-                style={{ color: up ? "var(--gold)" : "var(--steel)" }}
-              >
-                {up ? "▲" : "▼"} {Math.abs(metrics.deltaPct).toFixed(0)}%
-              </span>
-              <span className="text-xs text-ink-3">
-                vs last week · {formatMoney(metrics.lastWeek.earnings, cur)}
-              </span>
+                className="block mt-2 h-0.5 w-16 rounded-full"
+                style={{ background: "var(--brass)" }}
+              />
             </div>
-          ) : (
-            <div className="mt-3 text-xs text-ink-3">No earnings last week to compare</div>
-          )}
-          <div className="mt-auto pt-6">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mt-4">
+              <span className="num text-sm text-ink-2">
+                <b className="text-ink font-semibold">{billHours.toFixed(1)} h</b> billable · avg{" "}
+                {formatMoney(billHours > 0 ? metrics.thisWeek.earnings / billHours : 0, cur)}/hr
+              </span>
+              {metrics.deltaPct != null ? (
+                <span className="inline-flex items-center gap-1.5 text-sm">
+                  <span
+                    className="num font-semibold"
+                    style={{ color: up ? "var(--gold)" : "var(--steel)" }}
+                  >
+                    {up ? "▲" : "▼"} {Math.abs(metrics.deltaPct).toFixed(0)}%
+                  </span>
+                  <span className="text-xs text-ink-3">
+                    vs last week · {formatMoney(metrics.lastWeek.earnings, cur)}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-xs text-ink-3">No earnings last week to compare</span>
+              )}
+            </div>
+          </div>
+
+          <div>
             <div className="split">
               <i className="bill" style={{ width: `${billPct}%` }} />
               <i className="non" style={{ width: `${100 - billPct}%` }} />
@@ -282,9 +300,16 @@ export default async function TodayPage() {
               ))}
             </ul>
           )}
+          <Link
+            href="/invoices"
+            className="mt-auto pt-4 rule-t flex items-center justify-between text-xs text-ink-3 hover:text-ink transition-colors"
+          >
+            <span>All invoices</span>
+            <span aria-hidden>→</span>
+          </Link>
         </div>
 
-        {/* KPI stack — two dense rows instead of two hollow cards */}
+        {/* KPI stack — three dense rows instead of two hollow cards */}
         <div className="panel flex flex-col">
           <div className="p-5 flex items-center justify-between gap-4">
             <div>
@@ -307,6 +332,13 @@ export default async function TodayPage() {
               </div>
             </div>
             <div className="num text-2xl leading-none">{active.length}</div>
+          </div>
+          <div className="p-5 rule-t flex items-center justify-between gap-4">
+            <div>
+              <div className="label">Tracked this week</div>
+              <div className="text-[0.7rem] text-ink-3 mt-1">billable + non-billable</div>
+            </div>
+            <div className="num text-2xl leading-none">{totalWeek.toFixed(1)} h</div>
           </div>
         </div>
       </section>
@@ -383,6 +415,22 @@ export default async function TodayPage() {
                 );
               })}
             </tbody>
+            {list.length > 1 && (
+              <tfoot>
+                <tr className="border-t border-line-strong bg-surface-2">
+                  <td className="px-4 py-3 label" colSpan={2}>
+                    Total · {list.length} projects
+                  </td>
+                  <td className="hidden sm:table-cell px-4 py-3" />
+                  <td className="px-4 py-3 text-right num text-sm font-semibold">
+                    {formatHours(projTrackedSeconds)} h
+                  </td>
+                  <td className="px-4 py-3 text-right num text-sm font-semibold text-gold">
+                    {formatMoney(projEarnings, cur)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </section>
