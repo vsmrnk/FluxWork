@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ProjectForm } from "@/components/ProjectForm";
 import { FirstRunCard } from "@/components/FirstRunCard";
-import { Sparkline } from "@/components/Sparkline";
+import { WeeklyChart } from "@/components/WeeklyChart";
 import { formatHours, formatClock, elapsedSeconds } from "@/lib/time";
 import { formatMoney } from "@/lib/invoice";
 import { getOverviewMetrics } from "@/lib/metrics";
@@ -115,74 +115,90 @@ export default async function TodayPage() {
 
   return (
     <div className="page">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      {/* Header — title, live status pill, primary action */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
           <p className="text-sm text-ink-2 mt-1">
             Here’s what you’ve earned this week.
           </p>
         </div>
-        <ProjectForm
-          clients={clientOptions}
-          variant="ghost"
-          usageHint={
-            usage.tier === "free" &&
-            usage.projects.used >= usage.projects.limit - 1
-              ? `${usage.projects.used} of ${usage.projects.limit} free projects`
-              : undefined
-          }
-        />
-      </div>
-
-      {/* Today strip — tracked time + what's running now */}
-      <div className="panel px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="label">Today</span>
-        <span className="num text-lg font-semibold leading-none">
-          {formatClock(today.trackedSeconds)}
-        </span>
-        <span className="text-xs text-ink-3">tracked</span>
-        <span className="ml-auto min-w-0">
-          {today.running ? (
-            <span className="flex items-center gap-2 text-sm min-w-0">
+        <div className="flex items-center gap-3">
+          {/* Tracked-today + running state, folded out of the old strip. */}
+          <span className="inline-flex items-center gap-2.5 rounded-full border border-line bg-paper-2 pl-3 pr-3.5 py-1.5 shadow-[0_1px_2px_rgba(15,26,28,0.03)]">
+            {today.running ? (
               <span className="live-dot shrink-0" aria-hidden />
-              <span className="font-semibold truncate">{today.running.taskName}</span>
-              {today.running.projectName && (
-                <span className="text-ink-3 truncate">· {today.running.projectName}</span>
-              )}
+            ) : (
+              <span
+                className="h-1.5 w-1.5 rounded-full shrink-0"
+                style={{ background: "var(--ink-3)" }}
+                aria-hidden
+              />
+            )}
+            <span className="num text-sm font-semibold leading-none">
+              {formatClock(today.trackedSeconds)}
             </span>
-          ) : (
-            <span className="text-sm text-ink-3">Nothing running — start above</span>
-          )}
-        </span>
-      </div>
+            <span className="text-xs text-ink-3 truncate max-w-[13rem]">
+              {today.running ? today.running.taskName : "tracked today"}
+            </span>
+          </span>
+          <ProjectForm
+            clients={clientOptions}
+            variant="ghost"
+            usageHint={
+              usage.tier === "free" &&
+              usage.projects.used >= usage.projects.limit - 1
+                ? `${usage.projects.used} of ${usage.projects.limit} free projects`
+                : undefined
+            }
+          />
+        </div>
+      </header>
 
-      {/* Hero — billable earnings */}
-      <div className="rounded-[var(--radius-card)] overflow-hidden border grid md:grid-cols-[1.15fr_1fr]"
-        style={{
-          borderColor: "var(--line)",
-          background:
-            "radial-gradient(560px 260px at 18% 130%, var(--gold-dim), transparent 62%), var(--paper-2)",
-          boxShadow: "0 1px 2px rgba(15,26,28,0.04)",
-        }}
-      >
-        <div className="p-6 md:border-r border-b md:border-b-0 border-line">
+      {/* Hero — earnings (dominant) + weekly trend */}
+      <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+        {/* Projected earnings */}
+        <div
+          className="panel p-6 md:p-7 flex flex-col"
+          style={{
+            background:
+              "radial-gradient(620px 300px at 10% 120%, var(--gold-dim), transparent 60%), var(--paper-2)",
+          }}
+        >
           <div className="label text-gold flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-gold inline-block" />
             Projected earnings · this week
           </div>
-          <div className="serif text-ink leading-none mt-3 inline-block"
-            style={{ fontSize: "clamp(2.6rem, 6vw, 3.75rem)" }}
+          <div
+            className="serif text-ink leading-none mt-3 inline-block"
+            style={{ fontSize: "clamp(2.75rem, 5vw, 4.25rem)" }}
           >
             {formatMoney(metrics.thisWeek.earnings, cur)}
-            <span className="block mt-2 h-0.5 w-14 rounded-full" style={{ background: "var(--brass)" }} />
+            <span
+              className="block mt-2 h-0.5 w-16 rounded-full"
+              style={{ background: "var(--brass)" }}
+            />
           </div>
-          <div className="num text-sm text-ink-2 mt-3">
-            <b className="text-ink font-semibold">{billHours.toFixed(1)} h</b>{" "}
-            billable · avg{" "}
+          <div className="num text-sm text-ink-2 mt-4">
+            <b className="text-ink font-semibold">{billHours.toFixed(1)} h</b> billable · avg{" "}
             {formatMoney(billHours > 0 ? metrics.thisWeek.earnings / billHours : 0, cur)}/hr
           </div>
-          <div className="mt-5">
+          {metrics.deltaPct != null ? (
+            <div className="mt-3 inline-flex items-center gap-2 text-sm">
+              <span
+                className="num font-semibold"
+                style={{ color: up ? "var(--gold)" : "var(--steel)" }}
+              >
+                {up ? "▲" : "▼"} {Math.abs(metrics.deltaPct).toFixed(0)}%
+              </span>
+              <span className="text-xs text-ink-3">
+                vs last week · {formatMoney(metrics.lastWeek.earnings, cur)}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-3 text-xs text-ink-3">No earnings last week to compare</div>
+          )}
+          <div className="mt-auto pt-6">
             <div className="split">
               <i className="bill" style={{ width: `${billPct}%` }} />
               <i className="non" style={{ width: `${100 - billPct}%` }} />
@@ -200,55 +216,58 @@ export default async function TodayPage() {
           </div>
         </div>
 
-        <div className="p-6 flex flex-col justify-center gap-4">
-          <div className="flex items-baseline gap-2.5">
-            {metrics.deltaPct != null ? (
-              <>
-                <span
-                  className="num text-lg font-semibold"
-                  style={{ color: up ? "var(--gold)" : "var(--steel)" }}
-                >
-                  {up ? "▲" : "▼"} {Math.abs(metrics.deltaPct).toFixed(0)}%
-                </span>
-                <span className="text-xs text-ink-2">
-                  vs last week · {formatMoney(metrics.lastWeek.earnings, cur)}
-                </span>
-              </>
-            ) : (
-              <span className="text-xs text-ink-3">
-                No earnings last week to compare
-              </span>
-            )}
+        {/* Weekly trend — the real chart, filling the space the sparkline left empty */}
+        <div className="panel p-6 md:p-7 flex flex-col gap-5">
+          <span className="label">This week · by day</span>
+
+          <div className="mt-auto">
+            <WeeklyChart
+              values={metrics.daily}
+              todayIndex={Math.min(6, sinceMon)}
+              currency={cur}
+            />
           </div>
-          <div className="flex items-end gap-3">
-            <Sparkline values={metrics.daily} />
-            <div className="text-[0.7rem] text-ink-3">
-              Today
-              <b className="num block text-[0.95rem] text-ink font-semibold">
+
+          <div className="flex items-end justify-between gap-3 pt-4 rule-t">
+            <div>
+              <div className="num text-xl text-gold leading-none">
                 {formatMoney(todayEarnings, cur)}
-              </b>
+              </div>
+              <div className="label mt-1.5">Today</div>
+            </div>
+            <div className="text-right">
+              <div className="num text-sm text-ink-2 leading-none">
+                {formatMoney(Math.max(...metrics.daily, 0), cur)}
+              </div>
+              <div className="label mt-1.5">Best day</div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Secondary stats */}
-      <div className="grid sm:grid-cols-3 gap-3">
-        {/* Unbilled — actionable: every client row bridges straight to the invoice flow */}
-        <div className="panel p-4">
-          <div className="label flex items-center gap-2">
+      {/* Actionable Unbilled + compact KPI stack */}
+      <section className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+        {/* Unbilled — every client row bridges straight to the invoice flow */}
+        <div className="panel p-5 flex flex-col">
+          <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-[2px] bg-gold inline-block" />
-            Unbilled
-          </div>
-          <div className="num text-2xl text-gold mt-2">
-            {formatMoney(unbilled.total, unbilled.currency)}
+            <span className="label">Unbilled</span>
+            <span className="num text-2xl text-gold ml-auto leading-none">
+              {formatMoney(unbilled.total, unbilled.currency)}
+            </span>
           </div>
           {unbilled.perClient.length === 0 ? (
-            <div className="text-[0.7rem] text-ink-2 mt-1">Nothing unbilled yet</div>
+            <p className="text-sm text-ink-2 mt-4">
+              Nothing unbilled yet — track billable time on a client’s project and
+              it lands here, ready to invoice.
+            </p>
           ) : (
-            <ul className="mt-3">
+            <ul className="mt-4 flex flex-col">
               {unbilled.perClient.map((r) => (
-                <li key={r.clientId} className="flex items-center gap-2 py-2 rule-t">
+                <li
+                  key={r.clientId}
+                  className="flex items-center gap-3 py-2.5 rule-t first:border-t-0 first:pt-0"
+                >
                   <span className="text-sm font-semibold truncate">{r.clientName}</span>
                   <span className="num text-sm text-gold ml-auto shrink-0">
                     {formatMoney(r.amount, r.currency)}
@@ -264,24 +283,33 @@ export default async function TodayPage() {
             </ul>
           )}
         </div>
-        <div className="panel p-4">
-          <div className="label flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-[2px] border border-steel inline-block" />
-            Non-billable this week
+
+        {/* KPI stack — two dense rows instead of two hollow cards */}
+        <div className="panel flex flex-col">
+          <div className="p-5 flex items-center justify-between gap-4">
+            <div>
+              <div className="label flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-[2px] border border-steel inline-block" />
+                Non-billable
+              </div>
+              <div className="text-[0.7rem] text-ink-3 mt-1">admin, learning, internal</div>
+            </div>
+            <div className="num text-2xl text-steel leading-none">{nonHours.toFixed(1)} h</div>
           </div>
-          <div className="num text-2xl text-steel mt-2">{nonHours.toFixed(1)} h</div>
-          <div className="text-[0.7rem] text-ink-2 mt-1">admin, learning, internal</div>
-        </div>
-        <div className="panel p-4">
-          <div className="label">Active projects</div>
-          <div className="num text-2xl mt-2">{active.length}</div>
-          <div className="text-[0.7rem] mt-1"
-            style={{ color: needsClient > 0 ? "var(--danger)" : "var(--ink-2)" }}
-          >
-            {needsClient > 0 ? `${needsClient} needs a client` : "all set to bill"}
+          <div className="p-5 rule-t flex items-center justify-between gap-4">
+            <div>
+              <div className="label">Active projects</div>
+              <div
+                className="text-[0.7rem] mt-1"
+                style={{ color: needsClient > 0 ? "var(--danger)" : "var(--ink-3)" }}
+              >
+                {needsClient > 0 ? `${needsClient} needs a client` : "all set to bill"}
+              </div>
+            </div>
+            <div className="num text-2xl leading-none">{active.length}</div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Projects */}
       <section className="flex flex-col gap-3">
