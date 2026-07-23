@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { createProject } from "@/app/actions/projects";
 import { InlineClientForm } from "@/components/InlineClientForm";
 import { Modal } from "@/components/Modal";
+import { Select } from "@/components/Select";
 
 // Distinct project-identifier hues, drawn from the design tokens so the dots
 // read as part of the same palette (teal · green · blue · brass · violet · clay).
@@ -70,19 +71,16 @@ export function ProjectForm({
             {clientList.length === 0 ? (
               <input className="field" placeholder="No clients yet — add one below" disabled />
             ) : (
-              <select
+              <Select
                 name="client_id"
-                className="field"
+                aria-label="Client"
                 value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
-              >
-                <option value="">No client</option>
-                {clientList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedClientId}
+                options={[
+                  { value: "", label: "No client" },
+                  ...clientList.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
             )}
           </div>
           <div>

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { generateInvoice, previewInvoice } from "@/app/actions/invoices";
 import { formatMoney } from "@/lib/invoice";
+import { Select } from "@/components/Select";
 
 type ClientOption = { id: string; name: string };
 type ProjectOption = { id: string; name: string; client_id: string | null };
@@ -108,36 +109,30 @@ export function InvoiceGenerateForm({
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className="label block mb-2">Client</label>
-          <select
+          <Select
             name="client_id"
             required
-            className="field"
+            aria-label="Client"
+            placeholder="Select a client…"
             value={clientId}
-            onChange={(e) => {
-              setClientId(e.target.value);
+            onChange={(next) => {
+              setClientId(next);
               setPreview(null);
             }}
-          >
-            <option value="" disabled>
-              Select a client…
-            </option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            options={clients.map((c) => ({ value: c.id, label: c.name }))}
+          />
         </div>
         <div>
           <label className="label block mb-2">Project (optional)</label>
-          <select name="project_id" className="field" defaultValue="">
-            <option value="">All projects for client</option>
-            {clientProjects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            name="project_id"
+            aria-label="Project"
+            defaultValue=""
+            options={[
+              { value: "", label: "All projects for client" },
+              ...clientProjects.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+          />
         </div>
         <div>
           <label className="label block mb-2">Period start (optional)</label>
@@ -149,19 +144,23 @@ export function InvoiceGenerateForm({
         </div>
         <div>
           <label className="label block mb-2">Template</label>
-          <select name="template_id" className="field" defaultValue="">
-            <option value="">
-              {templates.some((t) => t.is_default)
-                ? "Your default template"
-                : "Built-in default template"}
-            </option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-                {t.is_default ? " (default)" : ""}
-              </option>
-            ))}
-          </select>
+          <Select
+            name="template_id"
+            aria-label="Template"
+            defaultValue=""
+            options={[
+              {
+                value: "",
+                label: templates.some((t) => t.is_default)
+                  ? "Your default template"
+                  : "Built-in default template",
+              },
+              ...templates.map((t) => ({
+                value: t.id,
+                label: `${t.name}${t.is_default ? " (default)" : ""}`,
+              })),
+            ]}
+          />
         </div>
         <div>
           <label className="label block mb-2">Invoice number (optional)</label>

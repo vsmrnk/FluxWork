@@ -17,6 +17,7 @@ import {
 } from "@/app/actions/time";
 import { formatDuration, elapsedSeconds } from "@/lib/time";
 import { formatMoney } from "@/lib/invoice";
+import { Select } from "@/components/Select";
 
 export type RunningEntry = {
   entryId: string;
@@ -366,19 +367,15 @@ function QuickPicker({
                 Start &ldquo;{query.trim()}&rdquo;
               </div>
               <div className="qp-create-row">
-                <select
-                  className="field"
+                <Select
                   aria-label="Project"
                   value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                >
-                  {picker.projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                  <option value="">New project</option>
-                </select>
+                  onChange={setProjectId}
+                  options={[
+                    ...picker.projects.map((p) => ({ value: p.id, label: p.name })),
+                    { value: "", label: "New project" },
+                  ]}
+                />
                 <button
                   type="button"
                   className="btn btn-accent btn-sm shrink-0"

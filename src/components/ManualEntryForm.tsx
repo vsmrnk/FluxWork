@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { addManualEntry, addTimeEntry } from "@/app/actions/time";
+import { Select } from "@/components/Select";
 import {
   formatDurationWords,
   parseTimeInput,
@@ -114,16 +115,14 @@ export function ManualEntryForm({
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className="label block mb-2">Task</label>
-          <select name="task_id" required className="field" defaultValue={defaultTaskId ?? ""}>
-            <option value="" disabled>
-              Select a task…
-            </option>
-            {tasks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            name="task_id"
+            required
+            aria-label="Task"
+            defaultValue={defaultTaskId ?? ""}
+            placeholder="Select a task…"
+            options={tasks.map((t) => ({ value: t.id, label: t.name }))}
+          />
         </div>
 
         {mode === "smart" ? (

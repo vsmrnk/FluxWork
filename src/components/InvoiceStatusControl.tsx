@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateInvoiceStatus } from "@/app/actions/invoices";
+import { Select } from "@/components/Select";
 
 const STATUSES = ["draft", "sent", "paid", "void"] as const;
 
@@ -33,18 +34,14 @@ export function InvoiceStatusControl({
   return (
     <label className="flex items-center gap-2">
       <span className="label">Status</span>
-      <select
-        className="field w-auto py-1.5"
+      <Select
+        className="w-auto py-1.5"
+        aria-label="Status"
         value={value}
         disabled={pending}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        options={STATUSES.map((s) => ({ value: s, label: s }))}
+      />
     </label>
   );
 }

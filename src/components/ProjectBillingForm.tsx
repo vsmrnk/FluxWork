@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateProjectBilling } from "@/app/actions/projects";
+import { Select } from "@/components/Select";
 
 type ClientOption = { id: string; name: string };
 
@@ -48,18 +49,15 @@ export function ProjectBillingForm({
           {clients.length === 0 ? (
             <input className="field" placeholder="No clients yet" disabled />
           ) : (
-            <select
+            <Select
               name="client_id"
-              className="field"
+              aria-label="Client"
               defaultValue={currentClientId ?? ""}
-            >
-              <option value="">No client</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "No client" },
+                ...clients.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
           )}
         </div>
         <div>
