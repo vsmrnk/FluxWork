@@ -48,7 +48,7 @@ const first = (v: string | string[] | undefined) =>
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-8">
+    <div className="page gap-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
         <p className="text-sm text-ink-2 mt-1">

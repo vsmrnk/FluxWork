@@ -23,7 +23,7 @@ export default async function MorePage() {
   const digestOn = user?.user_metadata?.digest_opt_out !== true;
 
   return (
-    <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-6">
+    <div className="page page-doc">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">More</h1>
         <p className="text-sm text-ink-2 mt-1">Settings and account.</p>

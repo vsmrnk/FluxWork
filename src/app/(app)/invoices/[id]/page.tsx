@@ -60,7 +60,7 @@ export default async function InvoiceDetailPage({
   const totalHours = lineList.reduce((a, l) => a + Number(l.hours), 0);
 
   return (
-    <div className="max-w-3xl px-5 md:px-8 py-7 flex flex-col gap-6">
+    <div className="page page-doc">
       <nav className="flex items-center gap-2 text-sm text-ink-3">
         <Link href="/invoices" className="hover:text-ink transition-colors">Invoices</Link>
         <span aria-hidden>/</span>

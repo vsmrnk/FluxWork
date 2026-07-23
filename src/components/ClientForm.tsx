@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient, updateClient } from "@/app/actions/clients";
+import { Modal } from "@/components/Modal";
 import type { Client } from "@/lib/database.types";
 
 type Props =
@@ -37,21 +38,17 @@ export function ClientForm(props: Props) {
     });
   }
 
-  if (!open) {
-    return (
-      <button className="btn btn-accent" onClick={() => setOpen(true)}>
-        + New client
-      </button>
-    );
-  }
-
   const c = props.client;
 
-  return (
+  const formEl = (
     <form
       ref={formRef}
       action={onSubmit}
-      className="rise border border-line-strong bg-paper-2 p-5 flex flex-col gap-4 rounded-md"
+      className={
+        editing
+          ? "rise border border-line-strong bg-paper-2 p-5 flex flex-col gap-4 rounded-md"
+          : "flex flex-col gap-4"
+      }
     >
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
@@ -148,5 +145,20 @@ export function ClientForm(props: Props) {
         )}
       </div>
     </form>
+  );
+
+  // Edit lives inline on the client detail page; create opens in a modal so it
+  // never balloons out of the header action slot it's triggered from.
+  if (editing) return formEl;
+
+  return (
+    <>
+      <button className="btn btn-accent" onClick={() => setOpen(true)}>
+        + New client
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="New client">
+        {formEl}
+      </Modal>
+    </>
   );
 }

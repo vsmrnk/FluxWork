@@ -77,7 +77,7 @@ export default async function ClientsPage() {
   const cur = unbilled.currency;
 
   return (
-    <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-6">
+    <div className="page">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>

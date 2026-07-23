@@ -31,8 +31,8 @@ export default async function ClientDetailPage({
   const projectList = (projects ?? []) as Project[];
 
   return (
-    <div className="max-w-3xl px-6 md:px-8 py-8">
-      <nav className="flex items-center gap-2 text-sm text-ink-3 mb-5">
+    <div className="page page-doc">
+      <nav className="flex items-center gap-2 text-sm text-ink-3">
         <Link href="/clients" className="hover:text-ink transition-colors">
           Clients
         </Link>
@@ -40,7 +40,7 @@ export default async function ClientDetailPage({
         <span className="text-ink-2 truncate">{c.name}</span>
       </nav>
 
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{c.name}</h1>
           <p className="text-sm text-ink-2 mt-1">
@@ -52,12 +52,12 @@ export default async function ClientDetailPage({
         </div>
       </div>
 
-      <section className="mb-10">
+      <section>
         <h2 className="panel-title mb-3">Details</h2>
         <ClientForm mode="edit" client={c} />
       </section>
 
-      <section className="mb-10">
+      <section>
         <div className="flex items-baseline gap-2 mb-3">
           <h2 className="panel-title">Projects</h2>
           <span className="num text-xs text-ink-3">{projectList.length}</span>

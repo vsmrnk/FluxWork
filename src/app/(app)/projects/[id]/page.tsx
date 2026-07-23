@@ -135,7 +135,7 @@ export default async function ProjectDetailPage({
   const clientRateSummary = `${linkedClient?.name ?? "No client"} · ${rateLabel}`;
 
   return (
-    <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-6">
+    <div className="page">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-ink-3">
         <Link href="/" className="hover:text-ink transition-colors">Today</Link>

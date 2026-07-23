@@ -105,7 +105,7 @@ export default async function ReportsPage({
   // Empty state (plan §8): one sentence + one button back to the loop.
   if (rows.length === 0) {
     return (
-      <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-6">
+      <div className="page">
         {header}
         <div className="panel px-6 py-10 text-center flex flex-col items-center gap-4">
           <p className="text-sm text-ink-2 max-w-md mx-auto">
@@ -195,7 +195,7 @@ export default async function ReportsPage({
     .sort((a, b) => b.amount - a.amount);
 
   return (
-    <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-6">
+    <div className="page">
       {header}
 
       {/* Totals strip */}

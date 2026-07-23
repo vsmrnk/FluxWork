@@ -3,8 +3,11 @@
 import { useRef, useState, useTransition } from "react";
 import { createProject } from "@/app/actions/projects";
 import { InlineClientForm } from "@/components/InlineClientForm";
+import { Modal } from "@/components/Modal";
 
-const SWATCHES = ["#ff3b00", "#111012", "#1f6feb", "#1a7f5a", "#9a6dff", "#d4a017"];
+// Distinct project-identifier hues, drawn from the design tokens so the dots
+// read as part of the same palette (teal · green · blue · brass · violet · clay).
+const SWATCHES = ["#0e5c63", "#176048", "#1f6feb", "#b9791f", "#7c5cff", "#c0483b"];
 
 type ClientOption = { id: string; name: string };
 
@@ -45,28 +48,19 @@ export function ProjectForm({
     });
   }
 
-  if (!open) {
-    return (
-      <div className="flex flex-col items-end gap-1.5">
-        <button
-          className={variant === "ghost" ? "btn btn-ghost" : "btn btn-accent"}
-          onClick={() => setOpen(true)}
-        >
-          + New project
-        </button>
-        {usageHint && <p className="num text-xs text-ink-3">{usageHint}</p>}
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-3">
-      <form
-        ref={formRef}
-        action={onSubmit}
-        className="rise border border-line-strong bg-paper-2 p-5 flex flex-col gap-4"
+    <div className="flex flex-col items-stretch sm:items-end gap-1.5">
+      <button
+        className={variant === "ghost" ? "btn btn-ghost" : "btn btn-accent"}
+        onClick={() => setOpen(true)}
       >
-        <div className="grid sm:grid-cols-2 gap-4">
+        + New project
+      </button>
+      {usageHint && <p className="num text-xs text-ink-3">{usageHint}</p>}
+
+      <Modal open={open} onClose={() => setOpen(false)} title="New project">
+        <form ref={formRef} action={onSubmit} className="flex flex-col gap-4">
+          <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label className="label block mb-2">Project name</label>
             <input name="name" required className="field" placeholder="Redesign" autoFocus />
@@ -137,14 +131,17 @@ export function ProjectForm({
         </div>
       </form>
 
-      {/* Just-in-time client creation. Sibling of the form (never nested), so its
-          own <form> stays valid; the new client is selected on the project. */}
-      <InlineClientForm
-        onCreated={(c) => {
-          setClientList((list) => [...list, c]);
-          setSelectedClientId(c.id);
-        }}
-      />
+          {/* Just-in-time client creation. Sibling of the form (never nested), so
+              its own <form> stays valid; the new client is selected here. */}
+          <div className="mt-4 pt-4 rule-t">
+            <InlineClientForm
+              onCreated={(c) => {
+                setClientList((list) => [...list, c]);
+                setSelectedClientId(c.id);
+              }}
+            />
+          </div>
+      </Modal>
     </div>
   );
 }

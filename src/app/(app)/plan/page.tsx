@@ -47,7 +47,7 @@ export default async function PlanPage() {
   ];
 
   return (
-    <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-6">
+    <div className="page">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Plan</h1>
         <p className="text-sm text-ink-2 mt-1">Your plan and the limits it sets.</p>

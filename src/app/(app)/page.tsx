@@ -114,7 +114,7 @@ export default async function TodayPage() {
   const up = metrics.deltaPct != null && metrics.deltaPct >= 0;
 
   return (
-    <div className="max-w-5xl px-5 md:px-8 py-7 flex flex-col gap-6">
+    <div className="page">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
