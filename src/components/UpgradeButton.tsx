@@ -1,11 +1,16 @@
 "use client";
 
 import Script from "next/script";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+type PaddleEvent = { name?: string };
 type PaddleGlobal = {
   Environment: { set: (env: string) => void };
-  Initialize: (opts: { token: string }) => void;
+  Initialize: (opts: {
+    token: string;
+    eventCallback?: (event: PaddleEvent) => void;
+  }) => void;
   Checkout: { open: (opts: Record<string, unknown>) => void };
 };
 
@@ -35,6 +40,7 @@ export function UpgradeButton({
   const configured = Boolean(token && priceId);
 
   const [ready, setReady] = useState(false);
+  const router = useRouter();
 
   if (!configured) {
     return (
@@ -48,8 +54,18 @@ export function UpgradeButton({
     const Paddle = window.Paddle;
     if (!Paddle) return;
     if (env === "sandbox") Paddle.Environment.set("sandbox");
-    Paddle.Initialize({ token: token! });
+    Paddle.Initialize({ token: token!, eventCallback: onPaddleEvent });
     setReady(true);
+  }
+
+  // When checkout succeeds, re-fetch the Server Component so the page reflects
+  // Pro without a manual reload. The subscription row is provisioned by Paddle's
+  // webhook, which lands a beat after the browser event — so refresh a couple of
+  // times to cover that lag. Extra refreshes are harmless once it's active.
+  function onPaddleEvent(event: PaddleEvent) {
+    if (event.name !== "checkout.completed") return;
+    window.setTimeout(() => router.refresh(), 1500);
+    window.setTimeout(() => router.refresh(), 4000);
   }
 
   function openCheckout() {
