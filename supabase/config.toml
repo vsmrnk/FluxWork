@@ -1,0 +1,10 @@
+# Supabase CLI config.
+#
+# `project_id` namespaces the local stack only — it is NOT the remote project
+# ref. The linked remote is recorded by `supabase link --project-ref <ref>`
+# into supabase/.temp, which is gitignored, so the same checkout can be linked
+# to the dev project on one machine and prod on another.
+#
+# Everything else intentionally stays at CLI defaults: the fewer values pinned
+# here, the less there is to drift when the CLI updates.
+project_id = "fluxwork"

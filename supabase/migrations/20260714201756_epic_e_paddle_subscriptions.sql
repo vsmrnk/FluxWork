@@ -19,7 +19,7 @@ create table if not exists public.subscriptions (
   updated_at             timestamptz not null default now()
 );
 
--- Fast lookup when a webhook can only match by Paddle customer / subscription id.
+-- Fast lookup when a webhook can only match by Paddle customer id.
 create index if not exists subscriptions_paddle_customer_id_idx
   on public.subscriptions (paddle_customer_id);
 create index if not exists subscriptions_paddle_subscription_id_idx

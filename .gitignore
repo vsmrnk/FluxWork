@@ -42,6 +42,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# supabase cli — link state and local stack scratch (migrations ARE committed)
+supabase/.temp
+supabase/.branches
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
