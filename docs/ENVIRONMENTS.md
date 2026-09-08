@@ -6,8 +6,8 @@ the database, not the auth users, not the billing state.
 | | dev | prod |
 |---|---|---|
 | Git branch | `dev` | `master` |
-| Vercel project | `fluxwork-dev` | `fluxwork` |
-| App URL | `fluxwork-dev.vercel.app` | `fluxwork-gamma.vercel.app` |
+| Vercel project | `fluxwork-dev` | `fluxwork-live` |
+| App URL | `task-tracking-ten.vercel.app` | `fluxwork-gamma.vercel.app` |
 | Supabase project | `[DEV] FluxWork` — ref `mojfjsrrckooeitxhsyl`, eu-central-1 | `[LIVE] FluxWork` — ref `jkhnppqrdnqdidrynzzc`, eu-west-1 |
 | Paddle | sandbox | sandbox today, live later |
 | Local `npm run dev` | uses **dev** Supabase | never |
@@ -26,7 +26,7 @@ files and the CLI — which is the rule this repo learned the hard way.
 ## Why two Vercel projects instead of preview deployments
 
 The obvious setup — one project, `dev` branch on a preview URL — does not work
-here. The `fluxwork` project has Vercel Authentication set to
+here. The `fluxwork-live` project has Vercel Authentication set to
 `all_except_custom_domains`, so every preview URL sits behind an SSO wall and
 inbound webhooks get a 401: the Supabase Send Email hook and the Paddle webhook
 would both silently fail on dev.
@@ -86,22 +86,30 @@ before every push — `db push` targets whatever is linked and there is no undo.
 ### 3. Switch the production Vercel project onto the new database
 
 Update `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY` and `AUTH_EMAIL_HOOK_SECRET` on the `fluxwork`
+`SUPABASE_SERVICE_ROLE_KEY` and `AUTH_EMAIL_HOOK_SECRET` on the `fluxwork-live`
 project, then redeploy. Until the redeploy, prod still talks to the dev
 database.
 
 ### 4. Dev Supabase project
 
 Its schema is already current. Only the hook target moves:
-Auth → Hooks → Send Email → `https://fluxwork-dev.vercel.app/api/auth/send-email`,
+Auth → Hooks → Send Email → `https://task-tracking-ten.vercel.app/api/auth/send-email`,
 and Site URL / Redirect URLs = the dev origin plus `http://localhost:3000`.
 
-### 5. Create the dev Vercel project
+### 5. The dev Vercel project
 
-Import the same GitHub repo again as `fluxwork-dev`, then Settings → Git →
-**Production Branch = `dev`**. Add the dev env vars.
+`fluxwork-dev` already exists and is connected to the same repo. It was created
+with **Production Branch = `master`**, which must become `dev` — otherwise both
+projects deploy the same branch and there is no dev environment at all. That
+setting is dashboard-only: neither the CLI nor the documented REST API exposes
+it.
 
-On the `fluxwork` project, set an Ignored Build Step so it stops building
+Its auto-generated domain is `task-tracking-ten.vercel.app`, inherited from the
+repo name. Cosmetic — a project domain is stable regardless of what it is
+called, and nothing depends on it beyond `AUTH_EMAIL_SITE_URL` and the webhook
+targets pointing at the same string.
+
+On the `fluxwork-live` project, set an Ignored Build Step so it stops building
 anything but `master`:
 
 ```sh
@@ -120,7 +128,7 @@ original database. Only `AUTH_EMAIL_SITE_URL` changes, to
 ### 7. Paddle
 
 Sandbox has one webhook destination, currently aimed at the prod URL. Add a
-second aimed at `https://fluxwork-dev.vercel.app/api/paddle/webhook` and put
+second aimed at `https://task-tracking-ten.vercel.app/api/paddle/webhook` and put
 its secret in the dev `PADDLE_WEBHOOK_SECRET`; keep the existing one for prod.
 
 Going live is a separate deliberate flip: live client token, live price id,
