@@ -58,82 +58,68 @@ live.
 
 ## Bring-up order
 
-Order matters: the production database is **empty**. Flipping the production
-app's env vars before the schema is pushed takes prod down.
+Order matters: the production database started **empty**. Flipping the
+production app's env vars before the schema was pushed would have taken prod
+down, so the schema went first.
 
-### 1. Schema into the new production project
+### Done
 
-```bash
-npx supabase login
-npx supabase link --project-ref jkhnppqrdnqdidrynzzc
-npx supabase db push
-```
+- **Schema.** All 13 migrations applied to the production project via
+  `supabase link --project-ref jkhnppqrdnqdidrynzzc && supabase db push`. No
+  database password was needed — the CLI provisions a login role from the
+  access token. `supabase/migrations/` is the verified history of what the
+  original database ran, so prod is schema-identical to dev. `db push` targets
+  whatever is linked and there is no undo, so check the linked ref first.
+- **Vercel env.** Both projects carry a full set for Production and Preview.
+  `fluxwork-live` points at the new prod database; `fluxwork-dev` at the
+  original one.
+- **Code.** `master` and `dev` both at the same commit; both environments
+  deployed and answering (`/login` 200, protected routes 307).
+- **Paddle.** A sandbox destination for dev exists —
+  `ntfset_01m21bdze0dehkrtd68my62dgn` → the dev `/api/paddle/webhook`, with the
+  same six subscribed events as prod. Its secret is set as the dev
+  `PADDLE_WEBHOOK_SECRET`.
+- **Local.** `.env.local` points at the dev database with
+  `AUTH_EMAIL_SITE_URL=http://localhost:3000`.
 
-`supabase/migrations/` is the verified history of what the original database
-actually ran, so prod lands schema-identical to dev. Check the linked ref
-before every push — `db push` targets whatever is linked and there is no undo.
+Gotcha worth remembering: piping a value into `vercel env add` through a
+PowerShell pipeline appends a newline, and Vercel rejects a `CRON_SECRET` with
+trailing whitespace ("not allowed in HTTP header values") — which fails the
+build, not just the cron. Always pass `--value`.
 
-### 2. Configure the production Supabase project
+### Still manual
 
-- Auth → Hooks → **Send Email** → `https://fluxwork-gamma.vercel.app/api/auth/send-email`.
-  Copy the generated secret into the prod `AUTH_EMAIL_HOOK_SECRET`. Without
-  this, signup on prod fails outright. (Careful: *Customize Access Token JWT
+- **Production Supabase auth.** The new project has no Send Email hook, so the
+  prod `AUTH_EMAIL_HOOK_SECRET` is still the *old* project's and means nothing
+  there. Set Auth → Hooks → **Send Email** →
+  `https://fluxwork-gamma.vercel.app/api/auth/send-email`, then copy the
+  generated secret onto `fluxwork-live`. (Careful: *Customize Access Token JWT
   Claims* is a different hook — setting that one by mistake breaks login.)
-- Auth → URL Configuration → Site URL = the prod origin.
-- Auth → enable Leaked Password Protection (it is off by default).
-- Storage buckets are created by the migrations; nothing to do by hand.
+  Also set Site URL to the prod origin.
+- **Dev Supabase auth.** Its Send Email hook still points at the prod app, left
+  over from when this project *was* prod. Repoint it to
+  `https://task-tracking-ten.vercel.app/api/auth/send-email`; the secret is
+  unchanged, so no env edit follows. Site URL / Redirect URLs = the dev origin
+  plus `http://localhost:3000`.
+- **Leaked Password Protection** is off on both projects.
+- **Duplicate Paddle destinations.** Two identical sandbox destinations point
+  at the prod webhook, so prod receives every event twice. Harmless — the
+  handler dedupes on `paddle_events.event_id` — but one should be deactivated.
+- **Ignored Build Step** on `fluxwork-live`, so it stops building branches
+  other than `master`:
 
-### 3. Switch the production Vercel project onto the new database
+  ```sh
+  if [ "$VERCEL_GIT_COMMIT_REF" = "master" ]; then exit 1; else exit 0; fi
+  ```
 
-Update `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY` and `AUTH_EMAIL_HOOK_SECRET` on the `fluxwork-live`
-project, then redeploy. Until the redeploy, prod still talks to the dev
-database.
+  (Exit 1 means "build", exit 0 means "skip" — inverted from what you would
+  guess.) Dashboard-only; neither the CLI nor the documented REST API exposes
+  it, same as Production Branch.
 
-### 4. Dev Supabase project
-
-Its schema is already current. Only the hook target moves:
-Auth → Hooks → Send Email → `https://task-tracking-ten.vercel.app/api/auth/send-email`,
-and Site URL / Redirect URLs = the dev origin plus `http://localhost:3000`.
-
-### 5. The dev Vercel project
-
-`fluxwork-dev` already exists and is connected to the same repo. It was created
-with **Production Branch = `master`**, which must become `dev` — otherwise both
-projects deploy the same branch and there is no dev environment at all. That
-setting is dashboard-only: neither the CLI nor the documented REST API exposes
-it.
-
-Its auto-generated domain is `task-tracking-ten.vercel.app`, inherited from the
-repo name. Cosmetic — a project domain is stable regardless of what it is
-called, and nothing depends on it beyond `AUTH_EMAIL_SITE_URL` and the webhook
-targets pointing at the same string.
-
-On the `fluxwork-live` project, set an Ignored Build Step so it stops building
-anything but `master`:
-
-```sh
-if [ "$VERCEL_GIT_COMMIT_REF" = "master" ]; then exit 1; else exit 0; fi
-```
-
-(Exit 1 means "build", exit 0 means "skip" — the sense is inverted from what
-you would guess.)
-
-### 6. Point local development at dev
-
-`.env.local` already holds the dev project's values, since dev *is* the
-original database. Only `AUTH_EMAIL_SITE_URL` changes, to
-`http://localhost:3000`.
-
-### 7. Paddle
-
-Sandbox has one webhook destination, currently aimed at the prod URL. Add a
-second aimed at `https://task-tracking-ten.vercel.app/api/paddle/webhook` and put
-its secret in the dev `PADDLE_WEBHOOK_SECRET`; keep the existing one for prod.
-
-Going live is a separate deliberate flip: live client token, live price id,
-`NEXT_PUBLIC_PADDLE_ENV=production`, and a Default Payment Link on an approved
-domain — live requires Checkout → Website approval, which is not instant.
+Going live on Paddle stays a separate deliberate flip: live client token, live
+price id, `NEXT_PUBLIC_PADDLE_ENV=production`, and a Default Payment Link on an
+approved domain — live requires Checkout → Website approval, which is not
+instant.
 
 ## Working rules
 
