@@ -37,19 +37,11 @@ export function BillableToggle({
       onClick={toggle}
       disabled={pending}
       title={billable ? "Billable — click to exclude" : "Non-billable — click to include"}
-      className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-[var(--radius)] border transition-colors"
-      style={{
-        borderColor: billable ? "var(--color-accent)" : "var(--color-line-strong)",
-        color: billable ? "var(--color-accent)" : "var(--color-ink-3)",
-      }}
+      // Semantic pair from the design system: billable = green, non-billable =
+      // steel. Teal is reserved for "running", so it must not appear here.
+      className={`badge ${billable ? "badge-bill" : "badge-non"} cursor-pointer transition-colors disabled:opacity-50`}
     >
-      <span
-        aria-hidden
-        className="h-1.5 w-1.5 rounded-full"
-        style={{
-          background: billable ? "var(--color-accent)" : "var(--color-ink-3)",
-        }}
-      />
+      <span className="dot" aria-hidden />
       {billable ? "Billable" : "Non-billable"}
     </button>
   );

@@ -69,26 +69,24 @@ export function StartBar({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [live, setLive] = useState(() =>
-    running ? elapsedSeconds(running.startedAt) : 0,
-  );
-
-  // Reset the live counter when the running entry changes — during render, so
-  // the effect never calls setState synchronously (React guidance).
-  const [prevId, setPrevId] = useState<string | null>(running?.entryId ?? null);
-  const curId = running?.entryId ?? null;
-  if (curId !== prevId) {
-    setPrevId(curId);
-    setLive(running ? elapsedSeconds(running.startedAt) : 0);
-  }
+  // Starts at 0 on both server and client so the first paint matches — seeding
+  // this from the clock instead would hydrate a second later than it rendered
+  // and throw a hydration mismatch. The effect fills in the real elapsed time
+  // immediately after mount, and again whenever the running entry changes.
+  const [live, setLive] = useState(0);
 
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(
-      () => setLive(elapsedSeconds(running.startedAt)),
-      1000,
-    );
-    return () => clearInterval(id);
+    const tick = () => setLive(elapsedSeconds(running.startedAt));
+    // First correction runs on the next frame rather than inline, so the
+    // effect body never sets state synchronously. `live` is only read inside
+    // the running branch, so a stale value from a previous run can't render.
+    const frame = requestAnimationFrame(tick);
+    const id = setInterval(tick, 1000);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearInterval(id);
+    };
   }, [running]);
 
   // Ctrl/⌘K toggles the picker from anywhere in the app.

@@ -282,6 +282,79 @@ export async function addTimeEntry(projectId: string, formData: FormData) {
   return { ok: true };
 }
 
+/**
+ * "What was done" — the note on a single entry. Kept separate from updateEntry
+ * so the time view can save a note inline without round-tripping the whole
+ * timestamp form (and without letting a stray blur rewrite the times).
+ */
+export async function setEntryNotes(
+  entryId: string,
+  projectId: string,
+  notes: string,
+) {
+  const { supabase } = await requireUser();
+  const clean = notes.trim();
+  if (clean.length > 500) return { error: "Keep notes under 500 characters." };
+
+  const { error } = await supabase
+    .from("time_entries")
+    .update({ notes: clean || null })
+    .eq("id", entryId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/**
+ * Full correction of one entry: which task it belongs to, its start/end, and
+ * its note. Leaving the end blank keeps the entry running, so a mistakenly
+ * stopped timer can be resumed rather than re-created. `duration_seconds` is a
+ * generated column, so it recomputes from the new timestamps automatically.
+ */
+export async function updateEntry(
+  entryId: string,
+  projectId: string,
+  formData: FormData,
+) {
+  const { supabase } = await requireUser();
+
+  const taskId = String(formData.get("task_id") ?? "").trim();
+  const startedAtLocal = String(formData.get("started_at") ?? "").trim();
+  const endedAtLocal = String(formData.get("ended_at") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+
+  if (!taskId) return { error: "Pick a task." };
+  if (!startedAtLocal) return { error: "A start time is required." };
+
+  const started = new Date(startedAtLocal);
+  if (Number.isNaN(started.getTime())) return { error: "Invalid start time." };
+
+  let ended: Date | null = null;
+  if (endedAtLocal) {
+    ended = new Date(endedAtLocal);
+    if (Number.isNaN(ended.getTime())) return { error: "Invalid end time." };
+    if (ended <= started) return { error: "The end must be after the start." };
+  }
+
+  const { error } = await supabase
+    .from("time_entries")
+    .update({
+      task_id: taskId,
+      started_at: started.toISOString(),
+      ended_at: ended ? ended.toISOString() : null,
+      notes,
+    })
+    .eq("id", entryId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/");
+  return { ok: true };
+}
+
 /** Override billability on a single entry (independent of the task default). */
 export async function setEntryBillable(
   entryId: string,

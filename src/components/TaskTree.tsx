@@ -3,7 +3,13 @@
 import { useRef, useState, useTransition } from "react";
 import { Timer } from "@/components/Timer";
 import { ConfirmAction } from "@/components/ConfirmAction";
-import { createSubtask, deleteTask, setTaskBillable } from "@/app/actions/tasks";
+import {
+  createSubtask,
+  deleteTask,
+  renameTask,
+  setTaskBillable,
+} from "@/app/actions/tasks";
+import { formatHours } from "@/lib/time";
 
 export type TaskNode = {
   id: string;
@@ -14,26 +20,45 @@ export type TaskNode = {
   children: TaskNode[];
 };
 
-const INDENT = 1.75; // rem per level
+const INDENT = 1.5; // rem per level
 
 function Row({
   node,
   depth,
   projectId,
   canAddSubtasks,
+  manage,
 }: {
   node: TaskNode;
   depth: number;
   projectId: string;
   // Pro-only affordance (plan §3.4 D1). Existing subtasks still render for all.
   canAddSubtasks: boolean;
+  /** Management view: expose rename. The overview board stays read-mostly. */
+  manage: boolean;
 }) {
   const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [renamePending, startRename] = useTransition();
   const [billable, setBillable] = useState(node.isBillable);
   const [billablePending, startBillable] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
+
+  const isRunning = node.running !== null;
+
+  function rename(formData: FormData) {
+    setError(null);
+    startRename(async () => {
+      const res = await renameTask(node.id, projectId, formData);
+      if (res?.error) {
+        setError(res.error);
+        return;
+      }
+      setRenaming(false);
+    });
+  }
 
   function toggleBillable() {
     const next = !billable;
@@ -59,11 +84,11 @@ function Row({
 
   return (
     <>
-      <div
-        className="border-b border-line flex items-center justify-between gap-4 py-3 pr-4 hover:bg-paper-2 transition-colors"
-        style={{ paddingLeft: `${1 + depth * INDENT}rem` }}
-      >
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="taskrow rule-b" data-running={isRunning ? "true" : "false"}>
+        <div
+          className="flex items-center gap-3 min-w-0"
+          style={{ paddingLeft: `${depth * INDENT}rem` }}
+        >
           {depth > 0 && (
             <span className="h-px w-3 -ml-1 bg-line-strong shrink-0" aria-hidden />
           )}
@@ -72,16 +97,79 @@ function Row({
             aria-hidden
             style={
               depth === 0
-                ? { height: 6, width: 6, background: "var(--color-ink)" }
+                ? {
+                    height: 7,
+                    width: 7,
+                    borderRadius: 2,
+                    background: isRunning
+                      ? "var(--color-accent)"
+                      : "var(--color-ink)",
+                  }
                 : {
-                    height: 6,
-                    width: 6,
+                    height: 7,
+                    width: 7,
                     borderRadius: 9999,
                     border: "1px solid var(--color-ink-3)",
                   }
             }
           />
-          <span className="truncate">{node.name}</span>
+          <div className="min-w-0">
+            {renaming ? (
+              <form action={rename} className="flex items-center gap-2">
+                <input
+                  name="name"
+                  defaultValue={node.name}
+                  autoFocus
+                  required
+                  aria-label="Task name"
+                  className="field py-1 text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setRenaming(false);
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={renamePending}
+                  className="btn btn-accent btn-sm px-3"
+                >
+                  {renamePending ? "…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm px-3"
+                  onClick={() => {
+                    setRenaming(false);
+                    setError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <>
+                <p className="truncate text-sm font-semibold leading-tight">
+                  {node.name}
+                </p>
+                {/* Always present so every row keeps the same height and the
+                    readouts on the right stay in a clean column. */}
+                <p
+                  className="text-[0.7rem] leading-tight mt-1 num"
+                  style={{
+                    color: isRunning
+                      ? "var(--color-accent)"
+                      : "var(--color-ink-3)",
+                  }}
+                >
+                  {isRunning
+                    ? "Tracking now"
+                    : `${formatHours(node.loggedSeconds)} h tracked`}
+                </p>
+              </>
+            )}
+            {error && (
+              <p className="num text-xs text-danger mt-1">{error}</p>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -94,45 +182,47 @@ function Row({
                 ? "Billable — new entries bill by default"
                 : "Non-billable — new entries won't bill"
             }
-            className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-[var(--radius)] border transition-colors"
-            style={{
-              borderColor: billable
-                ? "var(--color-accent)"
-                : "var(--color-line-strong)",
-              color: billable ? "var(--color-accent)" : "var(--color-ink-3)",
-            }}
+            className={`badge ${billable ? "badge-bill" : "badge-non"} cursor-pointer transition-colors disabled:opacity-50`}
           >
-            <span
-              aria-hidden
-              className="h-1.5 w-1.5 rounded-full"
-              style={{
-                background: billable
-                  ? "var(--color-accent)"
-                  : "var(--color-ink-3)",
-              }}
-            />
-            {billable ? "Billable" : "Non-billable"}
+            <span className="dot" aria-hidden />
+            <span className="hidden sm:inline">
+              {billable ? "Billable" : "Non-billable"}
+            </span>
           </button>
+
           <Timer
             taskId={node.id}
             projectId={projectId}
             running={node.running}
             loggedSeconds={node.loggedSeconds}
           />
+
+          {manage && !renaming && (
+            <button
+              type="button"
+              onClick={() => setRenaming(true)}
+              className="btn btn-ghost btn-sm"
+              aria-label={`Rename task ${node.name}`}
+              title="Rename task"
+            >
+              Rename
+            </button>
+          )}
           {canAddSubtasks && (
             <button
               onClick={() => setAdding((v) => !v)}
               className="btn btn-ghost btn-sm"
-              aria-label="Add subtask"
+              aria-label={`Add subtask under ${node.name}`}
               title="Add a subtask"
             >
-              + Subtask
+              ＋
             </button>
           )}
           <ConfirmAction
             action={deleteTask.bind(null, node.id, projectId)}
-            label="Delete"
-            confirmLabel="Delete task?"
+            label="✕"
+            ariaLabel={`Delete task ${node.name}`}
+            confirmLabel="Delete?"
             className="btn btn-ghost btn-sm"
           />
         </div>
@@ -140,7 +230,7 @@ function Row({
 
       {canAddSubtasks && adding && (
         <div
-          className="border-b border-line py-2 pr-4"
+          className="rule-b py-2 pr-4 bg-surface-2"
           style={{ paddingLeft: `${1 + (depth + 1) * INDENT}rem` }}
         >
           <form
@@ -161,13 +251,13 @@ function Row({
             <button
               type="submit"
               disabled={pending}
-              className="btn btn-accent px-3"
+              className="btn btn-accent btn-sm px-3"
             >
               {pending ? "…" : "Add"}
             </button>
             <button
               type="button"
-              className="btn px-3"
+              className="btn btn-sm px-3"
               onClick={() => {
                 setAdding(false);
                 setError(null);
@@ -175,7 +265,7 @@ function Row({
             >
               Cancel
             </button>
-            {error && <span className="num text-xs text-accent">{error}</span>}
+            {error && <span className="num text-xs text-danger">{error}</span>}
           </form>
         </div>
       )}
@@ -187,6 +277,7 @@ function Row({
           depth={depth + 1}
           projectId={projectId}
           canAddSubtasks={canAddSubtasks}
+          manage={manage}
         />
       ))}
     </>
@@ -197,15 +288,20 @@ export function TaskTree({
   projectId,
   nodes,
   canAddSubtasks = false,
+  manage = false,
 }: {
   projectId: string;
   nodes: TaskNode[];
   /** Pro plans get the "+ Subtask" affordance; free plans never see it. */
   canAddSubtasks?: boolean;
+  /** Management view: expose rename alongside the timer controls. */
+  manage?: boolean;
 }) {
   if (nodes.length === 0) return null;
   return (
-    <div className="border-t border-x border-line">
+    // Rows render as fragments, so every .taskrow is a direct child here and
+    // the last one can drop its rule against the panel edge.
+    <div className="[&>.taskrow:last-child]:border-b-0">
       {nodes.map((n) => (
         <Row
           key={n.id}
@@ -213,6 +309,7 @@ export function TaskTree({
           depth={0}
           projectId={projectId}
           canAddSubtasks={canAddSubtasks}
+          manage={manage}
         />
       ))}
     </div>

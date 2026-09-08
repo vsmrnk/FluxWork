@@ -13,30 +13,34 @@ type Props = {
   loggedSeconds: number;
 };
 
+function PlayGlyph() {
+  return (
+    <svg width="9" height="10" viewBox="0 0 9 10" aria-hidden focusable="false">
+      <path d="M0 0.5 L9 5 L0 9.5 Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function Timer({ taskId, projectId, running, loggedSeconds }: Props) {
   const [pending, startTransition] = useTransition();
-  const [live, setLive] = useState(() =>
-    running ? elapsedSeconds(running.started_at) : 0,
-  );
+  // Starts at 0 on both server and client so the first paint matches — seeding
+  // this from the clock instead would hydrate a second later than it rendered
+  // and throw a hydration mismatch. The effect fills in the real elapsed time
+  // immediately after mount, and again whenever the running entry changes.
+  const [live, setLive] = useState(0);
 
-  // Reset the live counter the moment the running entry changes (start/stop/
-  // switch) — done during render per React's "adjust state on prop change"
-  // guidance, so the effect never sets state synchronously.
-  const [prevId, setPrevId] = useState<string | null>(running?.id ?? null);
-  const curId = running?.id ?? null;
-  if (curId !== prevId) {
-    setPrevId(curId);
-    setLive(running ? elapsedSeconds(running.started_at) : 0);
-  }
-
-  // Tick once per second while running.
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(
-      () => setLive(elapsedSeconds(running.started_at)),
-      1000,
-    );
-    return () => clearInterval(id);
+    const tick = () => setLive(elapsedSeconds(running.started_at));
+    // First correction runs on the next frame rather than inline, so the
+    // effect body never sets state synchronously. `displaySeconds` ignores
+    // `live` while idle, so a stale value from a previous run can't render.
+    const frame = requestAnimationFrame(tick);
+    const id = setInterval(tick, 1000);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearInterval(id);
+    };
   }, [running]);
 
   const displaySeconds = loggedSeconds + (running ? live : 0);
@@ -54,31 +58,37 @@ export function Timer({ taskId, projectId, running, loggedSeconds }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="text-right tabular-nums min-w-[5.5rem]">
-        <span
-          className={`num text-lg ${running ? "text-accent" : "text-ink"}`}
-          aria-live="polite"
-        >
-          {formatDuration(displaySeconds)}
-        </span>
-      </div>
+    <div className="flex items-center gap-2.5">
+      <span
+        className="timer-read num"
+        data-running={running ? "true" : "false"}
+        aria-live="polite"
+        title={
+          running ? "Tracking now — total on this task" : "Total tracked on this task"
+        }
+      >
+        {running && <i className="live-dot shrink-0" aria-hidden />}
+        {formatDuration(displaySeconds)}
+      </span>
 
       {running ? (
         <button
           onClick={onStop}
           disabled={pending}
-          className="btn btn-accent min-w-[6rem] justify-center"
+          className="btn btn-accent btn-timer"
+          aria-label="Stop timer"
         >
-          <span className="live-dot" aria-hidden />
-          Stop
+          <i className="stop-glyph" aria-hidden />
+          {pending ? "…" : "Stop"}
         </button>
       ) : (
         <button
           onClick={onStart}
           disabled={pending}
-          className="btn min-w-[6rem] justify-center"
+          className="btn btn-timer btn-timer-start"
+          aria-label="Start timer"
         >
+          <PlayGlyph />
           {pending ? "…" : "Start"}
         </button>
       )}

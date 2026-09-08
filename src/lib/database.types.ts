@@ -307,44 +307,59 @@ export type Database = {
       }
       projects: {
         Row: {
+          budget_amount: number | null
+          budget_seconds: number | null
           client: string | null
           client_id: string | null
           code: string | null
           color: string
           created_at: string
+          ends_on: string | null
           id: string
           is_archived: boolean
           is_billable: boolean
           name: string
+          notes: string | null
           rate: number | null
+          starts_on: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          budget_amount?: number | null
+          budget_seconds?: number | null
           client?: string | null
           client_id?: string | null
           code?: string | null
           color?: string
           created_at?: string
+          ends_on?: string | null
           id?: string
           is_archived?: boolean
           is_billable?: boolean
           name: string
+          notes?: string | null
           rate?: number | null
+          starts_on?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          budget_amount?: number | null
+          budget_seconds?: number | null
           client?: string | null
           client_id?: string | null
           code?: string | null
           color?: string
           created_at?: string
+          ends_on?: string | null
           id?: string
           is_archived?: boolean
           is_billable?: boolean
           name?: string
+          notes?: string | null
           rate?: number | null
+          starts_on?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -393,32 +408,53 @@ export type Database = {
       }
       tasks: {
         Row: {
+          completed_at: string | null
           created_at: string
+          description: string | null
+          due_date: string | null
+          estimate_seconds: number | null
           id: string
           is_billable: boolean
           name: string
           parent_id: string | null
+          priority: string | null
           project_id: string
+          sort_order: number
+          status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          completed_at?: string | null
           created_at?: string
+          description?: string | null
+          due_date?: string | null
+          estimate_seconds?: number | null
           id?: string
           is_billable?: boolean
           name: string
           parent_id?: string | null
+          priority?: string | null
           project_id: string
+          sort_order?: number
+          status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          completed_at?: string | null
           created_at?: string
+          description?: string | null
+          due_date?: string | null
+          estimate_seconds?: number | null
           id?: string
           is_billable?: boolean
           name?: string
           parent_id?: string | null
+          priority?: string | null
           project_id?: string
+          sort_order?: number
+          status?: string
           updated_at?: string
           user_id?: string
         }
@@ -534,14 +570,32 @@ export type Database = {
       task_rollups: {
         Row: {
           entry_count: number | null
+          estimate_seconds: number | null
           last_tracked_at: string | null
+          parent_id: string | null
           project_id: string | null
+          sort_order: number | null
+          status: string | null
           task_id: string | null
           task_name: string | null
           total_seconds: number | null
           user_id: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "task_rollups"
+            referencedColumns: ["task_id"]
+          },
+          {
+            foreignKeyName: "tasks_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_project_id_fkey"
             columns: ["project_id"]

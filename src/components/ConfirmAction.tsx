@@ -7,6 +7,11 @@ type Props = {
   label: string;
   confirmLabel?: string;
   className?: string;
+  /**
+   * Accessible name + tooltip. Required in practice when `label` is a bare
+   * glyph ("✕"), which reads as nothing useful to a screen reader.
+   */
+  ariaLabel?: string;
 };
 
 /**
@@ -18,6 +23,7 @@ export function ConfirmAction({
   label,
   confirmLabel = "Confirm?",
   className = "btn",
+  ariaLabel,
 }: Props) {
   const [armed, setArmed] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -44,6 +50,8 @@ export function ConfirmAction({
     <button
       onClick={onClick}
       disabled={pending}
+      aria-label={ariaLabel}
+      title={ariaLabel}
       className={`${className} ${armed ? "btn-accent" : ""}`}
     >
       {pending ? "…" : armed ? confirmLabel : label}

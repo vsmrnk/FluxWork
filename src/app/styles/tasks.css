@@ -1,0 +1,13 @@
+/* ============================================================
+   Tasks workstream styles.
+   Owned exclusively by the task-management workstream — no other
+   workstream edits this file, which is what keeps parallel work
+   from colliding in globals.css.
+
+   Keep rules inside @layer components so Tailwind utilities applied
+   on an element still win, matching the rest of the design system.
+   ============================================================ */
+
+@layer components {
+  /* Add task-board rules here. */
+}
