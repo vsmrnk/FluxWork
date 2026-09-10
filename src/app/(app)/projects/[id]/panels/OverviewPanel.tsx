@@ -1,20 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { TaskForm } from "@/components/TaskForm";
-import { TaskTree, type TaskNode } from "@/components/TaskTree";
+import { TaskTree } from "@/components/TaskTree";
 import { ClientPanel } from "@/components/ClientPanel";
 import { WeeklyChart } from "@/components/WeeklyChart";
 import { formatHours } from "@/lib/time";
 import { formatMoney } from "@/lib/invoice";
 import { getProjectMetrics } from "@/lib/projectMetrics";
-import type { Client, Project, Task, TaskRollup } from "@/lib/database.types";
+import type { Client, Project } from "@/lib/database.types";
+import { getTaskTree } from "../data";
 
-/**
- * OVERVIEW PANEL — owned by the analytics/billing workstream.
- *
- * Self-fetching: it takes only the project, its client, and the resolved rate,
- * then reads whatever else it needs. That keeps this panel editable without
- * touching page.tsx or the other panels.
- */
 export async function OverviewPanel({
   projectId,
   project,
@@ -37,29 +31,16 @@ export async function OverviewPanel({
 }) {
   const supabase = await createClient();
 
-  const [{ data: projRollup }, metrics, { data: tasks }, { data: rollups }, { data: running }] =
-    await Promise.all([
-      supabase
-        .from("project_rollups")
-        .select("billable_seconds, total_seconds, entry_count")
-        .eq("project_id", projectId)
-        .maybeSingle(),
-      getProjectMetrics(supabase, projectId),
-      supabase
-        .from("tasks")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true }),
-      supabase.from("task_rollups").select("*").eq("project_id", projectId),
-      supabase
-        .from("time_entries")
-        .select("id, task_id, started_at, tasks!inner(project_id)")
-        .eq("tasks.project_id", projectId)
-        .is("ended_at", null),
-    ]);
+  const [{ data: projRollup }, metrics, { tasks, tree }] = await Promise.all([
+    supabase
+      .from("project_rollups")
+      .select("billable_seconds, total_seconds, entry_count")
+      .eq("project_id", projectId)
+      .maybeSingle(),
+    getProjectMetrics(supabase, projectId),
+    getTaskTree(projectId),
+  ]);
 
-  const taskList = (tasks ?? []) as Task[];
   const billableSeconds = projRollup?.billable_seconds ?? 0;
   const totalSeconds = projRollup?.total_seconds ?? 0;
   const billPct =
@@ -75,38 +56,10 @@ export async function OverviewPanel({
       ? (metrics.unbilledSeconds / 3600) * effectiveRate
       : null;
 
-  const loggedByTask = new Map<string, number>();
-  for (const r of (rollups ?? []) as TaskRollup[]) {
-    if (r.task_id) loggedByTask.set(r.task_id, r.total_seconds ?? 0);
-  }
-  const runningByTask = new Map<string, { id: string; started_at: string }>();
-  for (const e of running ?? []) {
-    if (!runningByTask.has(e.task_id)) {
-      runningByTask.set(e.task_id, { id: e.id, started_at: e.started_at });
-    }
-  }
-
-  const childrenOf = new Map<string | null, Task[]>();
-  for (const t of taskList) {
-    const bucket = childrenOf.get(t.parent_id) ?? [];
-    bucket.push(t);
-    childrenOf.set(t.parent_id, bucket);
-  }
-  const buildNode = (t: Task): TaskNode => ({
-    id: t.id,
-    name: t.name,
-    isBillable: t.is_billable,
-    running: runningByTask.get(t.id) ?? null,
-    loggedSeconds: loggedByTask.get(t.id) ?? 0,
-    children: (childrenOf.get(t.id) ?? []).map(buildNode),
-  });
-  const taskTree = (childrenOf.get(null) ?? []).map(buildNode);
-
-  const sinceMon = (new Date().getUTCDay() + 6) % 7;
-  const todayIndex = Math.min(6, sinceMon);
+  const todayIndex = (new Date().getUTCDay() + 6) % 7;
 
   const rateLabel =
-    effectiveRate != null ? `${formatMoney(effectiveRate, currency)}` : "No rate";
+    effectiveRate != null ? formatMoney(effectiveRate, currency) : "No rate";
   const rateSource =
     project.rate != null
       ? "Project override"
@@ -151,7 +104,7 @@ export async function OverviewPanel({
             {formatHours(totalSeconds)} h
           </div>
           <div className="text-[0.7rem] text-ink-3 mt-2">
-            {projRollup?.entry_count ?? 0} entries · {taskList.length} tasks
+            {projRollup?.entry_count ?? 0} entries · {tasks.length} tasks
           </div>
         </div>
 
@@ -191,12 +144,12 @@ export async function OverviewPanel({
           <div className="flex items-center justify-between gap-3 p-5 pb-4">
             <div className="flex items-baseline gap-2">
               <h2 className="panel-title">Quick start</h2>
-              <span className="num text-xs text-ink-3">{taskList.length}</span>
+              <span className="num text-xs text-ink-3">{tasks.length}</span>
             </div>
             <span className="text-[0.7rem] text-ink-3">Press Start to track</span>
           </div>
 
-          {taskTree.length === 0 ? (
+          {tree.length === 0 ? (
             <div className="px-5 py-10 text-center rule-t">
               <p className="font-medium mb-1">No tasks yet</p>
               <p className="text-sm text-ink-2">
@@ -207,7 +160,7 @@ export async function OverviewPanel({
             <div className="rule-t">
               <TaskTree
                 projectId={projectId}
-                nodes={taskTree}
+                nodes={tree}
                 canAddSubtasks={canUseAdvanced}
               />
             </div>

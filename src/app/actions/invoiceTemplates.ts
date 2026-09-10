@@ -1,25 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createClient as createSupabaseClient } from "@/lib/supabase/server";
 import { detectPlaceholders, DOCX_MIME } from "@/lib/docx";
 import { getPlan } from "@/lib/plan";
+import { requireUser } from "@/lib/supabase/server";
 
 const PRO_ONLY =
   "Custom invoice templates are a Pro feature. Upgrade on the Plan page.";
 
 const BUCKET = "invoice-templates";
 const MAX_BYTES = 5 * 1024 * 1024;
-
-async function requireUser() {
-  const supabase = await createSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  return { supabase, user };
-}
 
 export async function uploadTemplate(formData: FormData) {
   const { supabase, user } = await requireUser();
@@ -48,7 +38,7 @@ export async function uploadTemplate(formData: FormData) {
   try {
     placeholders = detectPlaceholders(buffer);
   } catch {
-    // Non-fatal: detection is best-effort metadata.
+    // Display-only metadata; a file it can't parse still uploads.
   }
 
   const path = `${user.id}/${crypto.randomUUID()}.docx`;
@@ -65,7 +55,6 @@ export async function uploadTemplate(formData: FormData) {
     placeholders,
   });
   if (error) {
-    // Roll back the orphaned object if the row insert fails.
     await supabase.storage.from(BUCKET).remove([path]);
     return { error: error.message };
   }
@@ -80,7 +69,6 @@ export async function setDefaultTemplate(templateId: string) {
   const plan = await getPlan(supabase);
   if (!plan.canUseAdvanced) return { error: PRO_ONLY };
 
-  // Clear any existing default, then set this one (RLS keeps it user-scoped).
   const { error: clearErr } = await supabase
     .from("invoice_templates")
     .update({ is_default: false })

@@ -1,25 +1,18 @@
 // End-to-end verification: drives the real Supabase API as an authenticated
 // user, exercising RLS, the generated duration column, and roll-up views.
 //
-//   node scripts/verify.mjs signup   -> create + return test user
-//   node scripts/verify.mjs run      -> sign in, CRUD, verify, cleanup
+//   npm run verify -- signup   -> create the test user
+//   npm run verify             -> sign in, CRUD, verify, cleanup
 //
-// Reads NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY from .env.local.
+// Uses NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY and
+// TEST_EMAIL / TEST_PASSWORD; the npm script loads .env.local.
 
-import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
-// --- load .env.local ---
-const env = {};
-for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-  const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-  if (m) env[m[1]] = m[2].trim();
-}
-const URL = env.NEXT_PUBLIC_SUPABASE_URL;
-const KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const EMAIL = process.env.TEST_EMAIL || "verify_fixed@tempo.test";
-const PASSWORD = "Password123!";
+const PASSWORD = process.env.TEST_PASSWORD;
 
 const mode = process.argv[2] || "run";
 const log = (...a) => console.log(...a);
@@ -31,6 +24,8 @@ const assert = (cond, msg) => {
   if (!cond) fail(msg);
   log("  ✓", msg);
 };
+
+if (!PASSWORD) fail("Set TEST_PASSWORD (see .env.example).");
 
 function anon() {
   return createClient(URL, KEY, {

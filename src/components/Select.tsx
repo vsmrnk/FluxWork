@@ -10,7 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-export type SelectOption = {
+type SelectOption = {
   value: string;
   label: string;
   disabled?: boolean;
@@ -27,8 +27,6 @@ type SelectProps = {
   /** Shown when nothing is selected and no option matches the current value. */
   placeholder?: string;
   disabled?: boolean;
-  /** Best-effort: kept for parity; native validation lives server-side. */
-  required?: boolean;
   className?: string;
   "aria-label"?: string;
 };
@@ -49,7 +47,6 @@ export function Select({
   name,
   placeholder,
   disabled,
-  required,
   className,
   "aria-label": ariaLabel,
 }: SelectProps) {
@@ -70,13 +67,10 @@ export function Select({
   const selectedIdx = options.findIndex((o) => o.value === selected);
   const selectedOption = selectedIdx >= 0 ? options[selectedIdx] : null;
 
-  const commit = useCallback(
-    (next: string) => {
-      if (!isControlled) setInternal(next);
-      onChange?.(next);
-    },
-    [isControlled, onChange],
-  );
+  function commit(next: string) {
+    if (!isControlled) setInternal(next);
+    onChange?.(next);
+  }
 
   const position = useCallback(() => {
     const el = triggerRef.current;
@@ -88,17 +82,17 @@ export function Select({
     setFlip(below < 240 && r.top > below);
   }, []);
 
-  const openMenu = useCallback(() => {
+  function openMenu() {
     if (disabled) return;
     position();
     setActiveIdx(selectedIdx >= 0 ? selectedIdx : 0);
     setOpen(true);
-  }, [disabled, position, selectedIdx]);
+  }
 
-  const close = useCallback(() => {
+  function close() {
     setOpen(false);
     triggerRef.current?.focus();
-  }, []);
+  }
 
   // Reposition while open; close on outside pointer / resize / scroll-away.
   useLayoutEffect(() => {
@@ -133,19 +127,16 @@ export function Select({
     node?.scrollIntoView({ block: "nearest" });
   }, [open, activeIdx]);
 
-  const step = useCallback(
-    (dir: 1 | -1) => {
-      setActiveIdx((i) => {
-        let next = i;
-        for (let n = 0; n < options.length; n++) {
-          next = (next + dir + options.length) % options.length;
-          if (!options[next]?.disabled) return next;
-        }
-        return i;
-      });
-    },
-    [options],
-  );
+  function step(dir: 1 | -1) {
+    setActiveIdx((i) => {
+      let next = i;
+      for (let n = 0; n < options.length; n++) {
+        next = (next + dir + options.length) % options.length;
+        if (!options[next]?.disabled) return next;
+      }
+      return i;
+    });
+  }
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (disabled) return;
@@ -218,7 +209,7 @@ export function Select({
 
   return (
     <>
-      {name && <input type="hidden" name={name} value={selected} required={required} />}
+      {name && <input type="hidden" name={name} value={selected} />}
       <button
         ref={triggerRef}
         type="button"
@@ -254,7 +245,6 @@ export function Select({
 
       {open &&
         rect &&
-        typeof document !== "undefined" &&
         createPortal(
           <div
             ref={menuRef}

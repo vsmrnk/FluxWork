@@ -29,8 +29,7 @@ export function ProjectForm({
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
-  // A client created inline is added here and pre-selected, so the project can
-  // be linked without leaving the form (plan §6 Flow 5).
+  // A client created inline is added here and pre-selected.
   const [clientList, setClientList] = useState<ClientOption[]>(clients);
   const [selectedClientId, setSelectedClientId] = useState("");
 

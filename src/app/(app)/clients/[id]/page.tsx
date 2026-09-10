@@ -5,7 +5,6 @@ import { ClientForm } from "@/components/ClientForm";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { setClientArchived, deleteClient } from "@/app/actions/clients";
 import { formatMoney } from "@/lib/invoice";
-import type { Client, Project } from "@/lib/database.types";
 
 export default async function ClientDetailPage({
   params,
@@ -15,20 +14,17 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: client } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: client }, { data: projects }] = await Promise.all([
+    supabase.from("clients").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("projects")
+      .select("id, name, color, rate")
+      .eq("client_id", id)
+      .order("name", { ascending: true }),
+  ]);
   if (!client) notFound();
-  const c = client as Client;
-
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("client_id", id)
-    .order("name", { ascending: true });
-  const projectList = (projects ?? []) as Project[];
+  const projectList = projects ?? [];
+  const archived = client.is_archived;
 
   return (
     <div className="page page-doc">
@@ -37,24 +33,24 @@ export default async function ClientDetailPage({
           Clients
         </Link>
         <span aria-hidden>/</span>
-        <span className="text-ink-2 truncate">{c.name}</span>
+        <span className="text-ink-2 truncate">{client.name}</span>
       </nav>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{c.name}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{client.name}</h1>
           <p className="text-sm text-ink-2 mt-1">
-            {c.default_rate != null
-              ? `${formatMoney(c.default_rate, c.currency)} / hour default`
+            {client.default_rate != null
+              ? `${formatMoney(client.default_rate, client.currency)} / hour default`
               : "No default rate set"}
-            {c.is_archived && " · Archived"}
+            {archived && " · Archived"}
           </p>
         </div>
       </div>
 
       <section>
         <h2 className="panel-title mb-3">Details</h2>
-        <ClientForm mode="edit" client={c} />
+        <ClientForm mode="edit" client={client} />
       </section>
 
       <section>
@@ -86,7 +82,7 @@ export default async function ClientDetailPage({
                 </span>
                 <span className="num text-xs text-ink-3 shrink-0">
                   {p.rate != null
-                    ? `${formatMoney(p.rate, c.currency)}/h`
+                    ? `${formatMoney(p.rate, client.currency)}/h`
                     : "inherits"}
                 </span>
               </Link>
@@ -99,11 +95,11 @@ export default async function ClientDetailPage({
         <form
           action={async () => {
             "use server";
-            await setClientArchived(id, !c.is_archived);
+            await setClientArchived(id, !archived);
           }}
         >
           <button type="submit" className="btn">
-            {c.is_archived ? "Unarchive client" : "Archive client"}
+            {archived ? "Unarchive client" : "Archive client"}
           </button>
         </form>
         <ConfirmAction

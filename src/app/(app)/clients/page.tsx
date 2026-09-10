@@ -2,10 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ClientForm } from "@/components/ClientForm";
 import { PlanMeter } from "@/components/PlanMeter";
-import { formatMoney } from "@/lib/invoice";
-import { getUnbilledByClient } from "@/lib/unbilled";
+import { formatMoney, listUnbilledClients } from "@/lib/invoice";
 import { getPlanUsage } from "@/lib/plan";
-import type { Client } from "@/lib/database.types";
 
 function relativeDate(iso: string | null): string {
   if (!iso) return "No activity";
@@ -36,17 +34,17 @@ export default async function ClientsPage() {
       .order("name", { ascending: true }),
     supabase.from("projects").select("id, client_id, rate, is_archived"),
     supabase.from("task_rollups").select("project_id, last_tracked_at"),
-    getUnbilledByClient(supabase),
+    listUnbilledClients(supabase),
     getPlanUsage(supabase),
   ]);
 
-  // Quiet heads-up as the free ceiling nears — one below it, or at it (plan §9).
+  // Heads-up from one below the free ceiling.
   const nearClientLimit =
     usage.tier === "free" &&
     Number.isFinite(usage.clients.limit) &&
     usage.clients.used >= usage.clients.limit - 1;
 
-  const list = (clients ?? []) as Client[];
+  const list = clients ?? [];
 
   // project → client, plus active-project counts
   const projClient = new Map<string, string | null>();
@@ -58,10 +56,7 @@ export default async function ClientsPage() {
     }
   }
 
-  // unbilled billable amount per client (shared with Today's Unbilled card)
-  const unbilledByClient = new Map(
-    unbilled.perClient.map((r) => [r.clientId, r.amount]),
-  );
+  const unbilledByClient = new Map(unbilled.map((c) => [c.id, c.amount]));
 
   // last activity per client (max across its projects)
   const lastByClient = new Map<string, string>();
@@ -73,8 +68,8 @@ export default async function ClientsPage() {
     if (!prev || r.last_tracked_at > prev) lastByClient.set(clientId, r.last_tracked_at);
   }
 
-  const totalUnbilled = unbilled.total;
-  const cur = unbilled.currency;
+  const totalUnbilled = unbilled.reduce((sum, c) => sum + c.amount, 0);
+  const cur = unbilled[0]?.currency ?? "USD";
 
   return (
     <div className="page">

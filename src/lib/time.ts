@@ -1,5 +1,3 @@
-/** Formatting helpers for durations. All inputs are whole seconds. */
-
 export function formatDuration(totalSeconds: number | null | undefined): string {
   const s = Math.max(0, Math.floor(totalSeconds ?? 0));
   const h = Math.floor(s / 3600);
@@ -8,23 +6,13 @@ export function formatDuration(totalSeconds: number | null | undefined): string 
   return [h, m, sec].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
-/** Decimal hours, Harvest-style (e.g. 1.25h). */
+/** Decimal hours, Harvest-style (e.g. 1.25). */
 export function formatHours(totalSeconds: number | null | undefined): string {
   const s = Math.max(0, Math.floor(totalSeconds ?? 0));
   return (s / 3600).toFixed(2);
 }
 
-/** Compact human label, e.g. "2h 05m" or "45m" or "12s". */
-export function formatCompact(totalSeconds: number | null | undefined): string {
-  const s = Math.max(0, Math.floor(totalSeconds ?? 0));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
-  if (m > 0) return `${m}m`;
-  return `${s}s`;
-}
-
-/** Short clock label, always h:mm (plan §8), e.g. "2:05" or "0:00". */
+/** Always h:mm, e.g. "2:05" or "0:00". */
 export function formatClock(totalSeconds: number | null | undefined): string {
   const s = Math.max(0, Math.floor(totalSeconds ?? 0));
   const h = Math.floor(s / 3600);
@@ -34,4 +22,22 @@ export function formatClock(totalSeconds: number | null | undefined): string {
 
 export function elapsedSeconds(startedAtIso: string, now = Date.now()): number {
   return Math.max(0, Math.floor((now - new Date(startedAtIso).getTime()) / 1000));
+}
+
+/** Monday 00:00 UTC of the week containing `d`. */
+export function startOfWeekUTC(d: Date): Date {
+  const sinceMon = (d.getUTCDay() + 6) % 7;
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - sinceMon),
+  );
+}
+
+const dateFmt = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "short",
+  day: "2-digit",
+});
+
+export function formatDate(iso: string | null): string {
+  return iso ? dateFmt.format(new Date(iso)) : "—";
 }

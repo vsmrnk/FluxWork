@@ -1,11 +1,5 @@
 @import "tailwindcss";
 
-/* Per-workstream stylesheets. Each is owned by exactly one workstream so
-   parallel feature work never contends for this file. */
-@import "./styles/tasks.css";
-@import "./styles/time.css";
-@import "./styles/overview.css";
-
 /* ============================================================
    FluxWork — light "studio" design system
    Cool cream canvas, white surfaces, hairline borders.

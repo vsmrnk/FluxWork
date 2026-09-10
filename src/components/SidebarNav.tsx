@@ -19,8 +19,7 @@ function Dot() {
 export function SidebarNav({ projects }: { projects: Item[] }) {
   const path = usePathname();
 
-  // Track → Review → Invoice lives up top; Clients/Plan are configuration and
-  // drop to a separated "Manage" cluster below the projects (plan §5).
+  // Clients and Plan are configuration, so they sit in a separate Manage cluster.
   const primary = [
     { href: "/", label: "Today" },
     { href: "/reports", label: "Reports" },

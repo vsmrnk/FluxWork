@@ -98,7 +98,7 @@ export default async function PlanPage() {
         </div>
       )}
 
-      {/* Usage — the ceilings shown before they're hit (plan §9) */}
+      {/* Usage */}
       <div className="panel p-5 flex flex-col gap-4">
         <span className="label">Usage</span>
         <PlanMeter

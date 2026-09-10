@@ -1,45 +1,37 @@
-// QA gate (Epic G3) — the rate/tax snapshot regression test.
+// Rate/tax snapshot regression test: once an invoice is generated, editing the
+// client's rate or tax later must NEVER rewrite it, while new invoices pick up
+// the new values.
 //
-// Proves the money guarantee a freelancer trusts: once an invoice is generated,
-// editing the client's rate or tax later NEVER rewrites the historical invoice,
-// while NEW invoices correctly pick up the new values.
+//   npm run verify:snapshot
 //
-//   npx tsx scripts/verify-invoice-snapshot.mts
-//
-// Signs in as the same test user as scripts/verify.mjs, seeds a tiny billing
-// graph, drives the real buildInvoiceDraft(), persists a snapshot exactly as the
-// generateInvoice server action does, then mutates rates and re-checks.
-//
-// Reads NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY from .env.local.
+// Signs in as the verify.mjs test user, seeds a tiny billing graph, drives the
+// real buildInvoiceDraft(), persists a snapshot the way generateInvoice does,
+// then mutates rates and re-checks.
 
-import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { buildInvoiceDraft } from "../src/lib/invoice.ts";
 
-const env: Record<string, string> = {};
-for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-  const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-  if (m) env[m[1]] = m[2].trim();
-}
-const URL = env.NEXT_PUBLIC_SUPABASE_URL;
-const KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const EMAIL = process.env.TEST_EMAIL || "verify_fixed@tempo.test";
-const PASSWORD = "Password123!";
+const PASSWORD = process.env.TEST_PASSWORD;
 
 const log = (...a: unknown[]) => console.log(...a);
-const fail = (msg: string) => {
+function fail(msg: string): never {
   console.error("✗ FAIL:", msg);
   process.exit(1);
-};
+}
 const assert = (cond: unknown, msg: string) => {
   if (!cond) fail(msg);
   log("  ✓", msg);
 };
 const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
 
-const sb = createClient(URL, KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+if (!PASSWORD) fail("Set TEST_PASSWORD (see .env.example).");
+
+const sb = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } },
+);
 
 const { data: signIn, error: signInErr } = await sb.auth.signInWithPassword({
   email: EMAIL,
@@ -65,7 +57,7 @@ async function cleanup() {
   const order = ["invoices", "time_entries", "tasks", "projects", "clients"];
   for (const table of order) {
     const ids = created.filter((c) => c.table === table).map((c) => c.id);
-    if (ids.length) await sb.from(table as never).delete().in("id", ids);
+    if (ids.length) await sb.from(table).delete().in("id", ids);
   }
 }
 
@@ -106,9 +98,9 @@ try {
   remember("time_entries", entry!.id);
 
   log("\n[2] Build draft at rate 100 / VAT 20");
-  const r1 = await buildInvoiceDraft(sb as never, { clientId: client!.id });
+  const r1 = await buildInvoiceDraft(sb, { clientId: client!.id });
   if ("error" in r1) fail("buildInvoiceDraft #1: " + r1.error);
-  const d1 = (r1 as { draft: Awaited<ReturnType<typeof buildInvoiceDraft>> extends { draft: infer D } ? D : never }).draft;
+  const d1 = r1.draft;
   assert(d1.lines.length === 1, "one line item");
   assert(near(d1.lines[0].rate, 100), "line rate resolved to 100 (inherited from client)");
   assert(near(d1.subtotal, 100), "subtotal = 100 (1h × 100)");
@@ -154,9 +146,9 @@ try {
   if (e2Err) fail("insert entry2: " + e2Err.message);
   remember("time_entries", entry2!.id);
 
-  const r2 = await buildInvoiceDraft(sb as never, { clientId: client!.id });
+  const r2 = await buildInvoiceDraft(sb, { clientId: client!.id });
   if ("error" in r2) fail("buildInvoiceDraft #2: " + r2.error);
-  const d2 = (r2 as { draft: typeof d1 }).draft;
+  const d2 = r2.draft;
   assert(near(d2.lines[0].rate, 200), "NEW draft resolves rate 200 (live resolution works)");
   assert(near(d2.tax.amount, 0), "NEW draft has no tax (client tax now 0)");
 

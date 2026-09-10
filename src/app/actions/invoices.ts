@@ -2,64 +2,24 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient as createSupabaseClient } from "@/lib/supabase/server";
 import {
   buildInvoiceDraft,
   formatMoney,
-  type DraftParams,
+  INVOICE_BUCKET,
   type InvoiceDraft,
 } from "@/lib/invoice";
 import { renderInvoiceDocx, DOCX_MIME } from "@/lib/docx";
-import { renderInvoicePdf } from "@/lib/invoicePdf";
+import { renderInvoicePdf, type InvoicePdfMeta } from "@/lib/invoicePdf";
 import { buildDefaultTemplateDocx } from "@/lib/defaultTemplate";
 import { track } from "@/lib/analytics";
-import { assertCanInvoice, getPlan } from "@/lib/plan";
+import { getPlan } from "@/lib/plan";
+import { requireUser } from "@/lib/supabase/server";
 
-const INVOICE_BUCKET = "invoices";
 const TEMPLATE_BUCKET = "invoice-templates";
-const PDF_MIME = "application/pdf";
-const STATUSES = ["draft", "sent", "paid", "void"] as const;
+const STATUSES = new Set(["draft", "sent", "paid", "void"]);
 
-async function requireUser() {
-  const supabase = await createSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  return { supabase, user };
-}
-
-const today = () => new Date().toISOString().slice(0, 10);
-
-/** Dry run for the UI: what would be invoiced, without persisting anything. */
-export async function previewInvoice(params: DraftParams) {
-  const { supabase } = await requireUser();
-  const res = await buildInvoiceDraft(supabase, params);
-  if ("error" in res) return { error: res.error };
-  const { draft } = res;
-  return {
-    ok: true as const,
-    lines: draft.lines,
-    subtotal: draft.subtotal,
-    tax: draft.tax,
-    total: draft.total,
-    currency: draft.currency,
-    billableHours: draft.billableHours,
-    entryCount: draft.entryIds.length,
-  };
-}
-
-/** Build the flat data object handed to the docx template. */
-function templateData(
-  draft: InvoiceDraft,
-  meta: {
-    invoiceNumber: string;
-    issuedDate: string;
-    dueDate: string | null;
-    projectName: string;
-    notes: string | null;
-  },
-) {
+/** The flat data object handed to the .docx template. */
+function templateData(draft: InvoiceDraft, meta: InvoicePdfMeta) {
   return {
     invoice_number: meta.invoiceNumber,
     issued_date: meta.issuedDate,
@@ -71,11 +31,9 @@ function templateData(
     project_name: meta.projectName,
     billable_hours: draft.billableHours.toFixed(2),
     subtotal: formatMoney(draft.subtotal, draft.currency),
-    // Tax is a single optional line. `has_tax` drives the {{#has_tax}}…{{/has_tax}}
-    // conditional section in templates so zero-tax invoices hide the row entirely.
+    // Drives the {{#has_tax}}…{{/has_tax}} section so zero-tax invoices hide the row.
     has_tax: draft.tax.amount > 0,
-    tax_label:
-      (draft.tax.label && draft.tax.label.trim()) || "Tax",
+    tax_label: draft.tax.label?.trim() || "Tax",
     tax_rate: draft.tax.rate.toFixed(draft.tax.rate % 1 === 0 ? 0 : 2),
     tax_amount: formatMoney(draft.tax.amount, draft.currency),
     total: formatMoney(draft.total, draft.currency),
@@ -94,23 +52,19 @@ function templateData(
 export async function generateInvoice(formData: FormData) {
   const { supabase, user } = await requireUser();
 
-  // Invoicing is a paid-only feature.
-  const planErr = await assertCanInvoice(supabase);
-  if (planErr) return planErr;
+  const plan = await getPlan(supabase);
+  if (!plan.canInvoice) {
+    return { error: "Invoicing is a paid feature. Upgrade to generate invoices." };
+  }
 
   const clientId = String(formData.get("client_id") ?? "").trim();
   if (!clientId) return { error: "Select a client." };
 
   const projectId = String(formData.get("project_id") ?? "").trim() || null;
-
-  // Custom invoice templates are a Pro-only capability. Ignore a chosen template
-  // for anyone without it — the built-in default still renders the document, so
-  // the request isn't discarded. Template choice never affects amounts.
-  let templateIdInput = String(formData.get("template_id") ?? "").trim() || null;
-  if (templateIdInput) {
-    const plan = await getPlan(supabase);
-    if (!plan.canUseAdvanced) templateIdInput = null;
-  }
+  // Custom templates are Pro-only; without one the built-in default renders.
+  const templateIdInput = plan.canUseAdvanced
+    ? String(formData.get("template_id") ?? "").trim() || null
+    : null;
   const periodStart = String(formData.get("period_start") ?? "").trim() || null;
   const periodEnd = String(formData.get("period_end") ?? "").trim() || null;
   const dueDate = String(formData.get("due_date") ?? "").trim() || null;
@@ -126,7 +80,7 @@ export async function generateInvoice(formData: FormData) {
   if ("error" in res) return { error: res.error };
   const { draft } = res;
 
-  // Auto invoice number when not supplied: INV-0001, 0002, …
+  // INV-0001, INV-0002, … when no number is supplied.
   let invoiceNumber = numberInput;
   if (!invoiceNumber) {
     const { count } = await supabase
@@ -136,9 +90,9 @@ export async function generateInvoice(formData: FormData) {
     invoiceNumber = `INV-${String((count ?? 0) + 1).padStart(4, "0")}`;
   }
 
-  const issuedDate = today();
+  const issuedDate = new Date().toISOString().slice(0, 10);
 
-  // Resolve template: explicit choice, else the user's default (may be none).
+  // Explicit choice, else the user's default template (may be none).
   let template: { storage_path: string } | null = null;
   let templateId: string | null = templateIdInput;
   if (templateIdInput) {
@@ -147,7 +101,7 @@ export async function generateInvoice(formData: FormData) {
       .select("id, storage_path")
       .eq("id", templateIdInput)
       .maybeSingle();
-    template = data ?? null;
+    template = data;
   } else {
     const { data } = await supabase
       .from("invoice_templates")
@@ -161,7 +115,6 @@ export async function generateInvoice(formData: FormData) {
     }
   }
 
-  // Persist the invoice header.
   const { data: invoice, error: invErr } = await supabase
     .from("invoices")
     .insert({
@@ -194,7 +147,6 @@ export async function generateInvoice(formData: FormData) {
   }
   const invoiceId = invoice.id;
 
-  // Snapshot the line items.
   const { error: lineErr } = await supabase.from("invoice_line_items").insert(
     draft.lines.map((l, i) => ({
       invoice_id: invoiceId,
@@ -212,23 +164,20 @@ export async function generateInvoice(formData: FormData) {
     return { error: lineErr.message };
   }
 
-  // Claim the time entries so they can't be billed twice (only still-free ones).
+  // Claim only still-free entries so nothing is billed twice.
   await supabase
     .from("time_entries")
     .update({ invoice_id: invoiceId })
     .in("id", draft.entryIds)
     .is("invoice_id", null);
 
-  // Funnel: invoice_generated (fires once the invoice + line items are committed,
-  // independent of whether document rendering below succeeds).
   await track(supabase, "invoice_generated", {
     invoice_id: invoiceId,
     total: draft.total,
     currency: draft.currency,
   });
 
-  // Always render a document. Use the chosen/default uploaded template if any,
-  // otherwise the built-in default so first-time users need zero setup.
+  // The invoice record stands even if rendering its documents fails.
   let warning: string | undefined;
   try {
     let projectName = "";
@@ -252,37 +201,26 @@ export async function generateInvoice(formData: FormData) {
       tmplBuf = buildDefaultTemplateDocx();
     }
 
-    const data = templateData(draft, {
-      invoiceNumber,
-      issuedDate,
-      dueDate,
-      projectName,
-      notes,
-    });
-    const docxBuf = renderInvoiceDocx(tmplBuf, data);
-
+    const meta = { invoiceNumber, issuedDate, dueDate, projectName, notes };
     const docxPath = `${user.id}/${invoiceId}.docx`;
     const { error: docxUpErr } = await supabase.storage
       .from(INVOICE_BUCKET)
-      .upload(docxPath, docxBuf, { contentType: DOCX_MIME, upsert: true });
+      .upload(docxPath, renderInvoiceDocx(tmplBuf, templateData(draft, meta)), {
+        contentType: DOCX_MIME,
+        upsert: true,
+      });
     if (docxUpErr) throw new Error(docxUpErr.message);
 
-    // Native PDF (send-to-client format), rendered in-process from the draft
-    // data — no external service. Best-effort: a PDF failure must not cost the
-    // user their DOCX, which is already uploaded above.
+    // Best-effort: a PDF failure must not cost the user the uploaded .docx.
     let pdfPath: string | null = null;
     try {
-      const pdfBuf = await renderInvoicePdf(draft, {
-        invoiceNumber,
-        issuedDate,
-        dueDate,
-        projectName,
-        notes,
-      });
       const candidate = `${user.id}/${invoiceId}.pdf`;
       const { error: pdfUpErr } = await supabase.storage
         .from(INVOICE_BUCKET)
-        .upload(candidate, pdfBuf, { contentType: PDF_MIME, upsert: true });
+        .upload(candidate, await renderInvoicePdf(draft, meta), {
+          contentType: "application/pdf",
+          upsert: true,
+        });
       if (!pdfUpErr) pdfPath = candidate;
     } catch {
       pdfPath = null;
@@ -293,7 +231,6 @@ export async function generateInvoice(formData: FormData) {
       .update({ docx_path: docxPath, pdf_path: pdfPath })
       .eq("id", invoiceId);
   } catch (e) {
-    // Keep the invoice record even if document rendering fails; surface why.
     warning =
       "Invoice saved, but document generation failed: " +
       (e instanceof Error ? e.message : "unknown error") +
@@ -306,9 +243,7 @@ export async function generateInvoice(formData: FormData) {
 
 export async function updateInvoiceStatus(invoiceId: string, status: string) {
   const { supabase } = await requireUser();
-  if (!STATUSES.includes(status as (typeof STATUSES)[number])) {
-    return { error: "Invalid status." };
-  }
+  if (!STATUSES.has(status)) return { error: "Invalid status." };
   const { error } = await supabase
     .from("invoices")
     .update({ status })
@@ -317,27 +252,6 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
   return { ok: true };
-}
-
-/** Signed, time-limited download URL for a generated file ("docx" | "pdf"). */
-export async function getInvoiceFileUrl(
-  invoiceId: string,
-  kind: "docx" | "pdf",
-) {
-  const { supabase } = await requireUser();
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("docx_path, pdf_path")
-    .eq("id", invoiceId)
-    .maybeSingle();
-  const path = kind === "pdf" ? invoice?.pdf_path : invoice?.docx_path;
-  if (!path) return { error: "That file isn't available for this invoice." };
-
-  const { data, error } = await supabase.storage
-    .from(INVOICE_BUCKET)
-    .createSignedUrl(path, 60 * 5);
-  if (error) return { error: error.message };
-  return { ok: true as const, url: data.signedUrl };
 }
 
 export async function deleteInvoice(invoiceId: string) {

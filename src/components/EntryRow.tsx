@@ -175,7 +175,6 @@ export function EntryRow({
             <label className="label block mb-2">Task</label>
             <Select
               name="task_id"
-              required
               aria-label="Task"
               defaultValue={taskId}
               options={tasks.map((t) => ({ value: t.id, label: t.name }))}

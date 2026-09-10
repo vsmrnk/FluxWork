@@ -4,19 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { InvoiceStatusControl } from "@/components/InvoiceStatusControl";
 import { deleteInvoice } from "@/app/actions/invoices";
-import { formatMoney } from "@/lib/invoice";
-import type { InvoiceLineItem } from "@/lib/database.types";
-
-const INVOICE_BUCKET = "invoices";
-
-function fmtDate(d: string | null): string {
-  if (!d) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(new Date(d));
-}
+import { formatMoney, signedInvoiceUrl } from "@/lib/invoice";
+import { formatDate } from "@/lib/time";
 
 export default async function InvoiceDetailPage({
   params,
@@ -26,36 +15,25 @@ export default async function InvoiceDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("*, clients(name, email, address)")
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: invoice }, { data: lines }] = await Promise.all([
+    supabase.from("invoices").select("*, clients(name)").eq("id", id).maybeSingle(),
+    supabase
+      .from("invoice_line_items")
+      .select("*")
+      .eq("invoice_id", id)
+      .order("sort_order", { ascending: true }),
+  ]);
   if (!invoice) notFound();
-
-  const { data: lines } = await supabase
-    .from("invoice_line_items")
-    .select("*")
-    .eq("invoice_id", id)
-    .order("sort_order", { ascending: true });
-  const lineList = (lines ?? []) as InvoiceLineItem[];
-
-  const client = invoice.clients as
-    | { name: string; email: string | null; address: string | null }
-    | null;
+  const lineList = lines ?? [];
 
   const [docxUrl, pdfUrl] = await Promise.all([
-    invoice.docx_path
-      ? supabase.storage.from(INVOICE_BUCKET).createSignedUrl(invoice.docx_path, 300).then((r) => r.data?.signedUrl ?? null)
-      : Promise.resolve(null),
-    invoice.pdf_path
-      ? supabase.storage.from(INVOICE_BUCKET).createSignedUrl(invoice.pdf_path, 300).then((r) => r.data?.signedUrl ?? null)
-      : Promise.resolve(null),
+    signedInvoiceUrl(supabase, invoice.docx_path),
+    signedInvoiceUrl(supabase, invoice.pdf_path),
   ]);
 
   const period =
     invoice.period_start || invoice.period_end
-      ? `${fmtDate(invoice.period_start)} – ${fmtDate(invoice.period_end)}`
+      ? `${formatDate(invoice.period_start)} – ${formatDate(invoice.period_end)}`
       : "All time";
   const totalHours = lineList.reduce((a, l) => a + Number(l.hours), 0);
 
@@ -71,8 +49,8 @@ export default async function InvoiceDetailPage({
         <div>
           <h1 className="num text-2xl font-semibold tracking-tight">{invoice.invoice_number}</h1>
           <p className="text-sm text-ink-2 mt-1">
-            {client?.name ?? "—"} · Issued {fmtDate(invoice.issued_date)}
-            {invoice.due_date && ` · Due ${fmtDate(invoice.due_date)}`}
+            {invoice.clients?.name ?? "—"} · Issued {formatDate(invoice.issued_date)}
+            {invoice.due_date && ` · Due ${formatDate(invoice.due_date)}`}
           </p>
         </div>
         <InvoiceStatusControl invoiceId={id} status={invoice.status} />
@@ -151,7 +129,6 @@ export default async function InvoiceDetailPage({
             </tbody>
           </table>
         </div>
-        {/* Rate snapshot — trust cue */}
         <p className="text-xs text-ink-3 flex items-center gap-1.5">
           <span aria-hidden>🔒</span>
           Rates locked at generation — later rate changes never affect this invoice.

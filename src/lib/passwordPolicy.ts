@@ -1,16 +1,9 @@
-/** Shared password policy. Used by the sign-up server action (authoritative
-   check) and the sign-up form (live feedback), so the rules can't drift apart.
-   Kept out of the "use server" actions module, which may only export async
-   functions. */
+// Shared by the auth actions (authoritative check) and the auth forms (live
+// feedback), so the rules can't drift apart.
+
 export const PASSWORD_MIN_LENGTH = 8;
 
-export type PasswordRule = {
-  id: string;
-  label: string;
-  test: (password: string) => boolean;
-};
-
-export const PASSWORD_RULES: PasswordRule[] = [
+const RULES: { id: string; label: string; test: (password: string) => boolean }[] = [
   {
     id: "length",
     label: `At least ${PASSWORD_MIN_LENGTH} characters`,
@@ -33,21 +26,17 @@ export const PASSWORD_RULES: PasswordRule[] = [
   },
 ];
 
-/** Evaluate every rule so callers can render per-rule pass/fail state. */
 export function evaluatePassword(password: string) {
-  return PASSWORD_RULES.map((rule) => ({
+  return RULES.map((rule) => ({
     id: rule.id,
     label: rule.label,
     passed: rule.test(password),
   }));
 }
 
-/**
- * Authoritative validation. Returns a single user-facing error string when the
- * password is too weak, or `null` when every rule passes.
- */
+/** A single user-facing error, or null when every rule passes. */
 export function validatePassword(password: string): string | null {
-  const unmet = PASSWORD_RULES.filter((rule) => !rule.test(password));
+  const unmet = RULES.filter((rule) => !rule.test(password));
   if (unmet.length === 0) return null;
   return `Password needs: ${unmet.map((r) => r.label.toLowerCase()).join(", ")}.`;
 }

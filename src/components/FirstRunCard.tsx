@@ -3,11 +3,7 @@
 import { useState, useTransition } from "react";
 import { quickStart } from "@/app/actions/time";
 
-/**
- * Flow 1 — the only thing between signup and a running timer. quickStart
- * creates a project + task from whatever the user types; both renameable
- * later. No client, no rate, no tax asked.
- */
+/** quickStart creates a project and task from whatever the user types. */
 export function FirstRunCard() {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();

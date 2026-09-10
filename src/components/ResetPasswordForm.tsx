@@ -1,36 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState } from "react";
 import { updatePassword, type AuthState } from "@/app/auth/actions";
-import { PASSWORD_MIN_LENGTH, evaluatePassword } from "@/lib/passwordPolicy";
+import { PASSWORD_MIN_LENGTH } from "@/lib/passwordPolicy";
+import { Arrow, LockIcon, PasswordMeter } from "@/components/AuthForm";
 
 const initial: AuthState = {};
 
-const LockIcon = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
-    <rect x="4" y="10.5" width="16" height="10" rx="2.5" />
-    <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
-  </svg>
-);
-
-const Arrow = () => (
-  <svg className="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden>
-    <path d="M5 12h14M13 6l6 6-6 6" />
-  </svg>
-);
-
-/**
- * Set-a-new-password form, shown on /reset-password after the recovery link
- * established a session. Mirrors the sign-up strength meter so the live rules
- * match the server's authoritative check in updatePassword.
- */
+/** Shown on /reset-password once the recovery link has established a session. */
 export function ResetPasswordForm() {
   const [password, setPassword] = useState("");
   const [state, formAction, pending] = useActionState(updatePassword, initial);
-
-  const checks = useMemo(() => evaluatePassword(password), [password]);
-  const passedCount = checks.filter((c) => c.passed).length;
 
   return (
     <div className="auth-formbox">
@@ -65,21 +46,7 @@ export function ResetPasswordForm() {
               placeholder="••••••••"
             />
           </div>
-          <div className="auth-pwmeter mt-2.5" aria-live="polite">
-            <div className="auth-pwbar" data-strength={passedCount}>
-              {checks.map((c) => (
-                <span key={c.id} data-on={c.passed} />
-              ))}
-            </div>
-            <ul className="auth-pwrules num">
-              {checks.map((c) => (
-                <li key={c.id} data-on={c.passed}>
-                  <span aria-hidden>{c.passed ? "✓" : "•"}</span>
-                  {c.label}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <PasswordMeter password={password} />
         </div>
 
         {state.error && (

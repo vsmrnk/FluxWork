@@ -1,11 +1,7 @@
 /**
- * Plan usage surfaces — the wall made visible before it's hit (plan §9).
- * `bar` is the full quota meter on the Plan page; `inline` is the quiet counter
- * shown next to a create action as the free ceiling nears. Counts only, so plain
- * `.num` — no currency. The fill turns brass at the ceiling to say "you're full".
+ * `bar` is the quota meter on the Plan page; `inline` is the quiet counter next
+ * to a create action. The fill turns brass at the ceiling.
  */
-type MeterVariant = "bar" | "inline";
-
 export function PlanMeter({
   label,
   used,
@@ -15,7 +11,7 @@ export function PlanMeter({
   label: string;
   used: number;
   limit: number;
-  variant?: MeterVariant;
+  variant?: "bar" | "inline";
 }) {
   const unlimited = !Number.isFinite(limit);
   const atLimit = !unlimited && used >= limit;

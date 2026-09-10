@@ -92,9 +92,8 @@ export function ProjectTabs({
         tabIndex={0}
         className="flex flex-col gap-4 focus-visible:outline-none"
       >
-        {/* One lookup, one child — three sibling `&&` expressions would make
-            React treat the panels as an unkeyed list. */}
-        {({ overview, tasks, time } as Record<ProjectView, ReactNode>)[view]}
+        {/* One lookup, one child: sibling `&&` panels would be an unkeyed list. */}
+        {{ overview, tasks, time }[view]}
       </div>
     </>
   );

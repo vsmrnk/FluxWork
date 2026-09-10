@@ -1,8 +1,7 @@
-/**
- * Range presets for the Reports screen and its CSV export. All boundaries are
- * computed in UTC with Monday-based weeks, matching metrics.ts, so every review
- * surface agrees on what "this week" means. Ranges are half-open [start, end).
- */
+import { startOfWeekUTC } from "@/lib/time";
+
+// Half-open [start, end) ranges in UTC with Monday-based weeks, matching the
+// Today metrics so every surface agrees on what "this week" means.
 
 export const REPORT_RANGES = [
   { key: "this-week", label: "This week" },
@@ -10,32 +9,6 @@ export const REPORT_RANGES = [
   { key: "this-month", label: "This month" },
   { key: "last-month", label: "Last month" },
 ] as const;
-
-export type ReportRangeKey = (typeof REPORT_RANGES)[number]["key"];
-
-export const DEFAULT_RANGE: ReportRangeKey = "this-week";
-
-export function isReportRangeKey(v: string | null | undefined): v is ReportRangeKey {
-  return REPORT_RANGES.some((r) => r.key === v);
-}
-
-function startOfWeekUTC(d: Date): Date {
-  const day = d.getUTCDay(); // 0 = Sun
-  const sinceMon = (day + 6) % 7;
-  return new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - sinceMon),
-  );
-}
-
-export type ResolvedRange = {
-  key: ReportRangeKey;
-  /** Short tab label, e.g. "This week". */
-  label: string;
-  start: Date;
-  end: Date; // exclusive
-  /** Human date span for the header, e.g. "Jul 21 – Jul 27" or "July 2026". */
-  periodLabel: string;
-};
 
 const dayFmt = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -53,10 +26,9 @@ function weekSpanLabel(start: Date, end: Date): string {
   return `${dayFmt.format(start)} – ${dayFmt.format(last)}`;
 }
 
-/** Resolve a raw searchParam into a concrete range, defaulting to this week. */
-export function resolveRange(raw: string | null | undefined, now = new Date()): ResolvedRange {
-  const key: ReportRangeKey = isReportRangeKey(raw) ? raw : DEFAULT_RANGE;
-  const label = REPORT_RANGES.find((r) => r.key === key)!.label;
+/** Resolves a raw searchParam into a concrete range, defaulting to this week. */
+export function resolveRange(raw: string | null | undefined, now = new Date()) {
+  const { key, label } = REPORT_RANGES.find((r) => r.key === raw) ?? REPORT_RANGES[0];
 
   const thisWeek = startOfWeekUTC(now);
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

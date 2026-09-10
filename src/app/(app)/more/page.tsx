@@ -3,11 +3,7 @@ import { signOut } from "@/app/auth/actions";
 import { setDigestOptOut } from "@/app/actions/digest";
 import { createClient } from "@/lib/supabase/server";
 
-/**
- * Mobile-only catch-all for the demoted destinations (plan §5). Reports, Clients
- * and Plan live here instead of the tab bar; sign-out reuses the same action the
- * sidebar footer does. Desktop reaches these straight from the sidebar.
- */
+// Mobile home for the destinations the tab bar has no room for.
 const links = [
   { href: "/reports", label: "Reports", hint: "Earned, tracked and unbilled by range" },
   { href: "/clients", label: "Clients", hint: "Who you bill, and their rates" },
@@ -47,7 +43,7 @@ export default async function MorePage() {
         ))}
       </div>
 
-      {/* Weekly digest opt-out (UX rework §2). Default on. */}
+      {/* Weekly digest opt-out. Default on. */}
       <div className="panel p-5 flex items-center justify-between gap-4">
         <span className="flex flex-col gap-0.5 min-w-0">
           <span className="font-medium">Weekly digest</span>

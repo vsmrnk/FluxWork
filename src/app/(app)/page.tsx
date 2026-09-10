@@ -1,29 +1,22 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, type Supabase } from "@/lib/supabase/server";
 import { ProjectForm } from "@/components/ProjectForm";
 import { FirstRunCard } from "@/components/FirstRunCard";
 import { WeeklyChart } from "@/components/WeeklyChart";
 import { formatHours, formatClock, elapsedSeconds } from "@/lib/time";
-import { formatMoney } from "@/lib/invoice";
+import { formatMoney, listUnbilledClients } from "@/lib/invoice";
 import { getOverviewMetrics } from "@/lib/metrics";
 import { getPlanUsage } from "@/lib/plan";
-import { getUnbilledByClient } from "@/lib/unbilled";
-import type { Supabase } from "@/lib/invoice";
-import type { Project, ProjectRollup } from "@/lib/database.types";
+import type { ProjectRollup } from "@/lib/database.types";
 
-type TodayStrip = {
-  trackedSeconds: number;
-  running: { taskName: string; projectName: string } | null;
-};
-
-/** Time tracked today (completed + running-so-far) and what's running now. */
-async function getTodayStrip(supabase: Supabase): Promise<TodayStrip> {
+/** Time tracked today (completed + running so far) and the running task, if any. */
+async function getTodayStrip(supabase: Supabase) {
   const now = new Date();
   const startOfToday = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
   ).toISOString();
 
-  const [{ data: done }, { data: runningEntry }] = await Promise.all([
+  const [{ data: done }, { data: running }] = await Promise.all([
     supabase
       .from("time_entries")
       .select("duration_seconds")
@@ -31,7 +24,7 @@ async function getTodayStrip(supabase: Supabase): Promise<TodayStrip> {
       .not("ended_at", "is", null),
     supabase
       .from("time_entries")
-      .select("started_at, tasks!inner(name, projects!inner(name))")
+      .select("started_at, tasks!inner(name)")
       .is("ended_at", null)
       .order("started_at", { ascending: false })
       .limit(1)
@@ -42,23 +35,9 @@ async function getTodayStrip(supabase: Supabase): Promise<TodayStrip> {
     (sum, e) => sum + (e.duration_seconds ?? 0),
     0,
   );
+  if (running) trackedSeconds += elapsedSeconds(running.started_at);
 
-  let running: TodayStrip["running"] = null;
-  if (runningEntry) {
-    const task = (
-      Array.isArray(runningEntry.tasks) ? runningEntry.tasks[0] : runningEntry.tasks
-    ) as { name: string; projects: unknown } | undefined;
-    const project = (
-      Array.isArray(task?.projects) ? task?.projects[0] : task?.projects
-    ) as { name: string } | undefined;
-    running = {
-      taskName: task?.name ?? "Untitled task",
-      projectName: project?.name ?? "",
-    };
-    trackedSeconds += elapsedSeconds(runningEntry.started_at);
-  }
-
-  return { trackedSeconds, running };
+  return { trackedSeconds, runningTask: running?.tasks.name ?? null };
 }
 
 export default async function TodayPage() {
@@ -78,14 +57,14 @@ export default async function TodayPage() {
         .eq("is_archived", false)
         .order("name", { ascending: true }),
       getOverviewMetrics(supabase),
-      getUnbilledByClient(supabase),
+      listUnbilledClients(supabase),
       getTodayStrip(supabase),
       getPlanUsage(supabase),
     ]);
 
-  const list = (projects ?? []) as Project[];
+  const list = projects ?? [];
 
-  // Flow 1 — zero projects means a brand-new account: one card, one input.
+  // Zero projects means a brand-new account.
   if (list.length === 0) {
     return (
       <div className="px-5 md:px-8">
@@ -112,6 +91,7 @@ export default async function TodayPage() {
   const todayEarnings = metrics.daily[Math.min(6, sinceMon)] ?? 0;
 
   const up = metrics.deltaPct != null && metrics.deltaPct >= 0;
+  const unbilledTotal = unbilled.reduce((sum, c) => sum + c.amount, 0);
 
   // Projects-table totals (footer row) — tracked + earnings across all projects.
   let projTrackedSeconds = 0;
@@ -136,9 +116,8 @@ export default async function TodayPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Tracked-today + running state, folded out of the old strip. */}
           <span className="inline-flex items-center gap-2.5 rounded-full border border-line bg-paper-2 pl-3 pr-3.5 py-1.5 shadow-[0_1px_2px_rgba(15,26,28,0.03)]">
-            {today.running ? (
+            {today.runningTask ? (
               <span className="live-dot shrink-0" aria-hidden />
             ) : (
               <span
@@ -151,7 +130,7 @@ export default async function TodayPage() {
               {formatClock(today.trackedSeconds)}
             </span>
             <span className="text-xs text-ink-3 truncate max-w-[13rem]">
-              {today.running ? today.running.taskName : "tracked today"}
+              {today.runningTask ?? "tracked today"}
             </span>
           </span>
           <ProjectForm
@@ -207,7 +186,7 @@ export default async function TodayPage() {
                     {up ? "▲" : "▼"} {Math.abs(metrics.deltaPct).toFixed(0)}%
                   </span>
                   <span className="text-xs text-ink-3">
-                    vs last week · {formatMoney(metrics.lastWeek.earnings, cur)}
+                    vs last week · {formatMoney(metrics.lastWeekEarnings, cur)}
                   </span>
                 </span>
               ) : (
@@ -234,7 +213,7 @@ export default async function TodayPage() {
           </div>
         </div>
 
-        {/* Weekly trend — the real chart, filling the space the sparkline left empty */}
+        {/* Weekly trend */}
         <div className="panel p-6 md:p-7 flex flex-col gap-5">
           <span className="label">This week · by day</span>
 
@@ -271,27 +250,27 @@ export default async function TodayPage() {
             <span className="h-1.5 w-1.5 rounded-[2px] bg-gold inline-block" />
             <span className="label">Unbilled</span>
             <span className="num text-2xl text-gold ml-auto leading-none">
-              {formatMoney(unbilled.total, unbilled.currency)}
+              {formatMoney(unbilledTotal, unbilled[0]?.currency ?? "USD")}
             </span>
           </div>
-          {unbilled.perClient.length === 0 ? (
+          {unbilled.length === 0 ? (
             <p className="text-sm text-ink-2 mt-4">
               Nothing unbilled yet — track billable time on a client’s project and
               it lands here, ready to invoice.
             </p>
           ) : (
             <ul className="mt-4 flex flex-col">
-              {unbilled.perClient.map((r) => (
+              {unbilled.map((r) => (
                 <li
-                  key={r.clientId}
+                  key={r.id}
                   className="flex items-center gap-3 py-2.5 rule-t first:border-t-0 first:pt-0"
                 >
-                  <span className="text-sm font-semibold truncate">{r.clientName}</span>
+                  <span className="text-sm font-semibold truncate">{r.name}</span>
                   <span className="num text-sm text-gold ml-auto shrink-0">
                     {formatMoney(r.amount, r.currency)}
                   </span>
                   <Link
-                    href={`/invoices?client=${r.clientId}`}
+                    href={`/invoices?client=${r.id}`}
                     className="btn btn-sm shrink-0"
                   >
                     Invoice →
@@ -309,7 +288,7 @@ export default async function TodayPage() {
           </Link>
         </div>
 
-        {/* KPI stack — three dense rows instead of two hollow cards */}
+        {/* KPI stack */}
         <div className="panel flex flex-col">
           <div className="p-5 flex items-center justify-between gap-4">
             <div>

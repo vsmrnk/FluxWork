@@ -4,15 +4,8 @@ import { formatHours } from "@/lib/time";
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /**
- * Weekly totals as a column chart — one bar per day, Monday-first. Days up to
- * and including today read in the active tone; today is emphasized; future days
- * sit as a faint track so the week visibly "fills up". Pure CSS/flex, so it
- * scales to any width without SVG stroke distortion and renders on the server.
- * Each bar carries a native tooltip; the whole thing is labelled for screen
- * readers.
- *
- * Two units share one chart: account-wide earnings (money · gold) on Today, and
- * project tracked time (seconds · teal) on the project dashboard.
+ * One bar per day, Monday first; future days sit as a faint track. Earnings
+ * (gold) on Today, tracked seconds (accent) on the project page.
  */
 export function WeeklyChart({
   values,

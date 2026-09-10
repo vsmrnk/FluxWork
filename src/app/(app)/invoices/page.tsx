@@ -9,11 +9,11 @@ import {
   buildInvoiceDraft,
   formatMoney,
   listUnbilledClients,
+  signedInvoiceUrl,
 } from "@/lib/invoice";
 import { getPlan } from "@/lib/plan";
+import { formatDate } from "@/lib/time";
 import { setDefaultTemplate, deleteTemplate } from "@/app/actions/invoiceTemplates";
-
-const INVOICE_BUCKET = "invoices";
 
 const STATUS_TONE: Record<string, string> = {
   draft: "text-ink-3",
@@ -21,27 +21,6 @@ const STATUS_TONE: Record<string, string> = {
   paid: "text-gold font-semibold",
   void: "text-ink-3 line-through",
 };
-
-type InvoiceRow = {
-  id: string;
-  invoice_number: string;
-  status: string;
-  currency: string;
-  total: number;
-  issued_date: string | null;
-  pdf_path: string | null;
-  docx_path: string | null;
-  clients: { name: string } | null;
-};
-
-function fmtDate(d: string | null): string {
-  if (!d) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(new Date(d));
-}
 
 const first = (v: string | string[] | undefined) =>
   (Array.isArray(v) ? v[0] : v)?.trim() || null;
@@ -85,14 +64,10 @@ export default async function InvoicesPage({
 
     if (invoice) {
       const [pdfUrl, docxUrl] = await Promise.all([
-        invoice.pdf_path
-          ? supabase.storage.from(INVOICE_BUCKET).createSignedUrl(invoice.pdf_path, 300).then((r) => r.data?.signedUrl ?? null)
-          : Promise.resolve(null),
-        invoice.docx_path
-          ? supabase.storage.from(INVOICE_BUCKET).createSignedUrl(invoice.docx_path, 300).then((r) => r.data?.signedUrl ?? null)
-          : Promise.resolve(null),
+        signedInvoiceUrl(supabase, invoice.pdf_path),
+        signedInvoiceUrl(supabase, invoice.docx_path),
       ]);
-      const client = invoice.clients as { name: string } | null;
+      const client = invoice.clients;
 
       return (
         <Shell>
@@ -249,7 +224,7 @@ export default async function InvoicesPage({
           <div className="flex flex-wrap gap-x-10 gap-y-4 pb-5 rule-b">
             <div>
               <div className="text-sm">
-                {fmtDate(draft.coveredFrom)} – {fmtDate(draft.coveredTo)}
+                {formatDate(draft.coveredFrom)} – {formatDate(draft.coveredTo)}
               </div>
               <div className="label mt-1">Period covered</div>
             </div>
@@ -350,10 +325,10 @@ export default async function InvoicesPage({
     getPlan(supabase),
     supabase
       .from("invoices")
-      .select("id, invoice_number, status, currency, total, issued_date, pdf_path, docx_path, clients(name)")
+      .select("id, invoice_number, status, currency, total, pdf_path, clients(name)")
       .order("created_at", { ascending: false }),
   ]);
-  const invoiceList = (invoices ?? []) as unknown as InvoiceRow[];
+  const invoiceList = invoices ?? [];
 
   // Custom templates are a Pro capability; only load them when unlocked.
   let templates: { id: string; name: string; is_default: boolean }[] = [];

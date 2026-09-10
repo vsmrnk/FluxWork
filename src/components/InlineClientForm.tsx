@@ -22,11 +22,6 @@ type Props = {
   variant?: "accent" | "ghost";
 };
 
-/**
- * Three-field client creator (name · email · rate) shown at the point a client
- * is first needed, so one can be created without visiting the Clients page
- * (plan §6 Flow 5). One component; placement varies via props.
- */
 export function InlineClientForm({
   projectId,
   onCreated,

@@ -20,20 +20,12 @@ type GlowState = {
 };
 
 /**
- * The dark editorial panel of the login design — cursor-following spotlight,
- * blueprint grid, product checklist. The left column of the /login page.
+ * The dark column of the auth pages. `ipad-cursor` replaces the OS cursor only
+ * while the pointer is over it (init on enter, dispose on leave).
  *
- * Carries an iPadOS-style pointer via the `ipad-cursor` library, scoped to this
- * panel: initCursor on enter, disposeCursor on leave, so the OS cursor is only
- * replaced while the pointer is over the dark column. Elements tagged
- * `data-cursor="block"` (the logo) make the pointer morph and wrap them, iPad
- * style.
- *
- * The spotlight itself (.auth-glow) is two radial layers driven by a rAF lerp
- * rather than a CSS transition: a transition restarts its easing on every
- * mousemove and rubber-bands, while the per-frame lerp glides. The tight core
- * chases the pointer faster than the wide ambient wash, which gives the light
- * a slight depth parallax.
+ * The spotlight is two radial layers driven by a rAF lerp, not a CSS
+ * transition: a transition restarts its easing on every mousemove and
+ * rubber-bands. The core chases faster than the ambient wash, for depth.
  */
 export function AuthAside({ brand = false }: { brand?: boolean }) {
   const asideRef = useRef<HTMLElement | null>(null);

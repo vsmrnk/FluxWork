@@ -5,12 +5,6 @@ import { useRouter } from "next/navigation";
 import { ConfirmAction } from "@/components/ConfirmAction";
 import { setProjectArchived, deleteProject } from "@/app/actions/projects";
 
-/**
- * The rare + destructive project actions (archive, delete), moved off the main
- * scroll into a header "⋯" menu so the page never mixes daily-use with config or
- * destructive controls (plan §3.3 F3). Delete keeps ConfirmAction's two-click
- * semantics; on success deleteProject redirects home.
- */
 export function ProjectOverflowMenu({
   projectId,
   isArchived,

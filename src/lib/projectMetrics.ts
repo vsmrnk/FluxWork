@@ -1,34 +1,11 @@
-import type { Supabase } from "@/lib/invoice";
+import type { Supabase } from "@/lib/supabase/server";
+import { startOfWeekUTC } from "@/lib/time";
 
 /**
- * Project-scoped counterpart to `getOverviewMetrics` (which is account-wide).
- * Returns raw seconds only — the caller owns the effective rate
- * (project.rate ?? client.default_rate) and turns seconds into money, so the
- * two never drift apart. Weeks are Monday-based, computed in UTC to match
- * `lib/metrics.ts`.
+ * Project-scoped tracked seconds for the current UTC week. Returns seconds only;
+ * the caller applies the effective rate so money is computed in one place.
  */
-
-export type ProjectMetrics = {
-  /** 7 buckets of tracked seconds, Mon → Sun of the current week. */
-  weekSeconds: number[];
-  weekBillableSeconds: number;
-  weekTotalSeconds: number;
-  todaySeconds: number;
-  /** Billable seconds not yet pulled onto an invoice (all-time). */
-  unbilledSeconds: number;
-};
-
-function startOfWeekUTC(d: Date): Date {
-  const sinceMon = (d.getUTCDay() + 6) % 7; // getUTCDay: 0 = Sun
-  return new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - sinceMon),
-  );
-}
-
-export async function getProjectMetrics(
-  supabase: Supabase,
-  projectId: string,
-): Promise<ProjectMetrics> {
+export async function getProjectMetrics(supabase: Supabase, projectId: string) {
   const now = new Date();
   const startThis = startOfWeekUTC(now);
   const startToday = new Date(
@@ -51,7 +28,7 @@ export async function getProjectMetrics(
       .not("ended_at", "is", null),
   ]);
 
-  const weekSeconds = [0, 0, 0, 0, 0, 0, 0];
+  const weekSeconds = [0, 0, 0, 0, 0, 0, 0]; // Mon → Sun
   let weekBillableSeconds = 0;
   let weekTotalSeconds = 0;
   let todaySeconds = 0;

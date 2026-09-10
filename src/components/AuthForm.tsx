@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import {
   signIn,
@@ -47,7 +47,7 @@ const MailIcon = () => (
   </svg>
 );
 
-const LockIcon = () => (
+export const LockIcon = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
     <rect x="4" y="10.5" width="16" height="10" rx="2.5" />
     <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
@@ -61,11 +61,34 @@ const MailOpenIcon = () => (
   </svg>
 );
 
-const Arrow = () => (
+export const Arrow = () => (
   <svg className="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden>
     <path d="M5 12h14M13 6l6 6-6 6" />
   </svg>
 );
+
+/** Live checklist that mirrors the server's authoritative password policy. */
+export function PasswordMeter({ password }: { password: string }) {
+  const checks = evaluatePassword(password);
+  const passedCount = checks.filter((c) => c.passed).length;
+  return (
+    <div className="auth-pwmeter mt-2.5" aria-live="polite">
+      <div className="auth-pwbar" data-strength={passedCount}>
+        {checks.map((c) => (
+          <span key={c.id} data-on={c.passed} />
+        ))}
+      </div>
+      <ul className="auth-pwrules num">
+        {checks.map((c) => (
+          <li key={c.id} data-on={c.passed}>
+            <span aria-hidden>{c.passed ? "✓" : "•"}</span>
+            {c.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 const copy = {
   in: {
@@ -354,10 +377,6 @@ function SignPane({
   // Show the redirect error until the user submits the form themselves.
   const error = state.error ?? (state === initial ? initialError : undefined);
 
-  // Live checklist for sign-up. Mirrors the server's authoritative policy.
-  const checks = useMemo(() => evaluatePassword(password), [password]);
-  const passedCount = checks.filter((c) => c.passed).length;
-
   const sent = state.sent === "confirm";
 
   // Same as ResetPane: action-transition-driven swap, so no AnimatePresence.
@@ -455,23 +474,7 @@ function SignPane({
                   placeholder="••••••••"
                 />
               </div>
-              {mode === "up" && (
-                <div className="auth-pwmeter mt-2.5" aria-live="polite">
-                  <div className="auth-pwbar" data-strength={passedCount}>
-                    {checks.map((c) => (
-                      <span key={c.id} data-on={c.passed} />
-                    ))}
-                  </div>
-                  <ul className="auth-pwrules num">
-                    {checks.map((c) => (
-                      <li key={c.id} data-on={c.passed}>
-                        <span aria-hidden>{c.passed ? "✓" : "•"}</span>
-                        {c.label}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {mode === "up" && <PasswordMeter password={password} />}
               {mode === "in" && (
                 <div className="mt-2 text-right">
                   <button

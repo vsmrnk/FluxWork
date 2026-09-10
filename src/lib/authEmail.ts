@@ -1,21 +1,7 @@
 import crypto from "node:crypto";
 import { escapeHtml, renderEmailShell } from "@/lib/emailShell";
 
-/**
- * Auth transactional email — the Next.js backend replacement for the former
- * n8n "Supabase Auth Emails → Gmail" workflow. Supabase's "Send Email" auth hook
- * POSTs here (see src/app/api/auth/send-email/route.ts); we verify the Standard
- * Webhooks signature, render a branded email, and deliver it via Resend's HTTP
- * API. No external automation service is involved.
- *
- * The branded shell (logo, palette, scaffold) lives in emailShell.ts and is
- * shared with the weekly digest; escapeHtml is re-exported for callers that
- * imported it from here.
- */
-
-export { escapeHtml };
-
-// ── Payload shape (Supabase Send Email hook) ────────────────────────────────
+// Payload of the Supabase "Send Email" auth hook.
 export type SendEmailHookPayload = {
   user: { id: string; email: string };
   email_data: {
@@ -133,13 +119,6 @@ const COPY: Record<string, Copy> = {
   },
 };
 
-/**
- * Render a branded transactional email. Email-client-safe: table layout, inline
- * styles only, no external assets — the FluxWork mark is drawn with nested
- * table cells (teal rounded square, serif "F", brass underline) so it renders
- * without an image request. Brand palette mirrors globals.css. The scaffold
- * (logo + card frame + footer row) is the shared shell from emailShell.ts.
- */
 export function renderAuthEmail(
   actionType: string,
   confirmUrl: string,

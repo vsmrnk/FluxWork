@@ -627,14 +627,8 @@ export type Database = {
 
 type PublicSchema = Database["public"]
 
-// Convenience row aliases used across the app.
+// Hand-added row aliases; re-append after regenerating this file.
 export type Client = PublicSchema["Tables"]["clients"]["Row"]
 export type Project = PublicSchema["Tables"]["projects"]["Row"]
 export type Task = PublicSchema["Tables"]["tasks"]["Row"]
-export type TimeEntry = PublicSchema["Tables"]["time_entries"]["Row"]
-export type InvoiceTemplate = PublicSchema["Tables"]["invoice_templates"]["Row"]
-export type Invoice = PublicSchema["Tables"]["invoices"]["Row"]
-export type InvoiceLineItem = PublicSchema["Tables"]["invoice_line_items"]["Row"]
 export type ProjectRollup = PublicSchema["Views"]["project_rollups"]["Row"]
-export type TaskRollup = PublicSchema["Views"]["task_rollups"]["Row"]
-export type Subscription = PublicSchema["Tables"]["subscriptions"]["Row"]

@@ -4,13 +4,8 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 /**
- * Portal-rendered modal dialog. Used for create surfaces (new project, new
- * client) that previously expanded inline inside a header action slot and
- * floated detached in the corner. Rendering to <body> escapes the app grid's
- * stacking context so the dialog centers over the whole viewport.
- *
- * Closes on Escape and backdrop click; locks body scroll; moves focus to the
- * first field on open.
+ * Portalled to <body> to escape the app grid's stacking context. Closes on
+ * Escape and backdrop click, locks body scroll, and focuses the first field.
  */
 export function Modal({
   open,

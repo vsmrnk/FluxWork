@@ -1,25 +1,15 @@
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 
-/**
- * DOCX templating via docxtemplater (pure JS — runs fine on serverless).
- * Delimiters are set to {{ }} to match the invoice template placeholders
- * (e.g. {{client_name}}, {{total_amount}}) and loop tags {{#items}}…{{/items}}.
- */
-
 export const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-const DELIMITERS = { start: "{{", end: "}}" } as const;
-
-/** Fill a template .docx buffer with `data`, returning the rendered .docx buffer. */
 export function renderInvoiceDocx(
   templateBuffer: Buffer,
   data: Record<string, unknown>,
 ): Buffer {
-  const zip = new PizZip(templateBuffer);
-  const doc = new Docxtemplater(zip, {
-    delimiters: DELIMITERS,
+  const doc = new Docxtemplater(new PizZip(templateBuffer), {
+    delimiters: { start: "{{", end: "}}" },
     paragraphLoop: true,
     linebreaks: true,
   });
@@ -28,9 +18,8 @@ export function renderInvoiceDocx(
 }
 
 /**
- * Best-effort extraction of {{placeholder}} names from an uploaded template,
- * for display only (schema column is nullable). XML tags are stripped first so
- * placeholders split across runs are still detected.
+ * Best-effort list of {{placeholder}} names, for display only. XML tags are
+ * stripped first so placeholders split across Word runs are still found.
  */
 export function detectPlaceholders(templateBuffer: Buffer): string[] {
   const zip = new PizZip(templateBuffer);

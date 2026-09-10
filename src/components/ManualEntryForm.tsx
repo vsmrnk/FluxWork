@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { addManualEntry, addTimeEntry } from "@/app/actions/time";
 import { Select } from "@/components/Select";
 import {
@@ -28,10 +28,8 @@ function shortDate(dateStr: string): string {
 }
 
 /**
- * "Add time" (plan §6 Flow 3): a task picker plus one smart field that reads
- * "2h", "1:30", "45m", "1h 30m" or a range "9:30-11:00". The interpreted result
- * is shown live before saving. An "exact times" mode keeps the timestamp pair
- * for corrections that need precise clock-in/out, behind the same entry point.
+ * One field that reads "2h", "1:30", "45m", "1h 30m" or "9:30-11:00", shown
+ * interpreted before saving. "Exact times" mode takes a start/end pair instead.
  */
 export function ManualEntryForm({
   projectId,
@@ -52,19 +50,15 @@ export function ManualEntryForm({
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Live interpretation of the smart field — same parser the server re-runs.
-  const preview = useMemo(() => {
-    if (mode !== "smart" || !input.trim()) return null;
-    const parsed = parseTimeInput(input);
-    if (!parsed.ok) return { error: parsed.error, text: null as string | null };
+  // Live interpretation — the same parser the server re-runs.
+  const parsed = mode === "smart" && input.trim() ? parseTimeInput(input) : null;
+  let previewText: string | null = null;
+  if (parsed?.ok) {
     const isToday = date === today;
     const { started, ended } = resolveEntryTimes(parsed, date, isToday);
     const day = isToday ? "today" : shortDate(date);
-    return {
-      error: null as string | null,
-      text: `${formatDurationWords(parsed.seconds)} · ${clockOf(started)}–${clockOf(ended)} ${day}`,
-    };
-  }, [mode, input, date, today]);
+    previewText = `${formatDurationWords(parsed.seconds)} · ${clockOf(started)}–${clockOf(ended)} ${day}`;
+  }
 
   function reset() {
     formRef.current?.reset();
@@ -76,9 +70,9 @@ export function ManualEntryForm({
   function onSubmit(formData: FormData) {
     setError(null);
     if (mode === "smart") {
-      const parsed = parseTimeInput(input);
-      if (!parsed.ok) {
-        setError(parsed.error);
+      const result = parseTimeInput(input);
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
     }
@@ -117,7 +111,6 @@ export function ManualEntryForm({
           <label className="label block mb-2">Task</label>
           <Select
             name="task_id"
-            required
             aria-label="Task"
             defaultValue={defaultTaskId ?? ""}
             placeholder="Select a task…"
@@ -151,11 +144,11 @@ export function ManualEntryForm({
               />
             </div>
             <div className="sm:col-span-2 min-h-[1.25rem]">
-              {preview?.text && (
-                <p className="num text-xs text-ink-2">{preview.text}</p>
+              {previewText && (
+                <p className="num text-xs text-ink-2">{previewText}</p>
               )}
-              {preview?.error && (
-                <p className="num text-xs text-ink-3">{preview.error}</p>
+              {parsed && !parsed.ok && (
+                <p className="num text-xs text-ink-3">{parsed.error}</p>
               )}
             </div>
           </>

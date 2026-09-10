@@ -5,15 +5,23 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { track } from "@/lib/analytics";
-import { OAUTH_PROVIDERS, type OAuthProvider } from "@/lib/authProviders";
 import { validatePassword } from "@/lib/passwordPolicy";
+
+const OAUTH_PROVIDERS = ["google", "github"] as const;
 
 export type AuthState = {
   error?: string;
   message?: string;
-  /** Set when an email was (nominally) dispatched — drives the "check your inbox" panel. */
+  /** Drives the "check your inbox" panel. */
   sent?: "reset" | "confirm";
 };
+
+// Built from the live request so localhost, preview and production each
+// round-trip to themselves; every origin must be in Supabase's Redirect URLs.
+async function requestOrigin() {
+  const hdrs = await headers();
+  return hdrs.get("origin") ?? `https://${hdrs.get("x-forwarded-host") ?? hdrs.get("host")}`;
+}
 
 export async function signIn(
   _prev: AuthState,
@@ -56,12 +64,12 @@ export async function signUp(
 
   if (error) return { error: error.message };
 
-  // When email confirmation is enabled, no session is returned yet.
+  // With email confirmation on, there is no session yet.
   if (!data.session) {
     return { sent: "confirm" };
   }
 
-  // Funnel: signup (only recordable once a session exists so RLS insert passes).
+  // Only recordable once a session exists, so the RLS insert passes.
   await track(supabase, "signup");
 
   revalidatePath("/", "layout");
@@ -69,18 +77,12 @@ export async function signUp(
 }
 
 /**
- * Start an OAuth sign-in. Supabase (PKCE) hands back a provider URL and stores
- * the code verifier in a cookie via our server client; we redirect the browser
- * to the provider, which returns to /auth/callback to complete the exchange.
- *
- * Used directly as a <form action>, so it takes FormData and returns void
- * (redirect throws). `redirectTo` is built from the live request origin, so
- * localhost, preview, and production each round-trip to their own callback —
- * every such origin must be in Supabase's Redirect URLs allowlist.
+ * Supabase (PKCE) returns a provider URL and stores the code verifier in a
+ * cookie; the provider then returns to /auth/callback to finish the exchange.
  */
 export async function signInWithProvider(formData: FormData): Promise<void> {
-  const provider = String(formData.get("provider") ?? "") as OAuthProvider;
-  if (!OAUTH_PROVIDERS.includes(provider)) {
+  const provider = OAUTH_PROVIDERS.find((p) => p === formData.get("provider"));
+  if (!provider) {
     redirect("/login?error=oauth");
   }
 
@@ -88,16 +90,11 @@ export async function signInWithProvider(formData: FormData): Promise<void> {
   const nextRaw = String(formData.get("next") ?? "/");
   const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
 
-  const hdrs = await headers();
-  const origin =
-    hdrs.get("origin") ??
-    `https://${hdrs.get("x-forwarded-host") ?? hdrs.get("host")}`;
-
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      redirectTo: `${await requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   });
 
@@ -108,12 +105,7 @@ export async function signInWithProvider(formData: FormData): Promise<void> {
   redirect(data.url);
 }
 
-/**
- * Send a password-reset email. Supabase mints a `recovery` token and fires our
- * Send Email hook (see src/lib/authEmail.ts), whose link lands at /auth/confirm
- * → verifyOtp → `redirectTo`. We always report a neutral success so the form
- * never reveals whether an address has an account.
- */
+/** Always reports a neutral success so the form never reveals whether an account exists. */
 export async function resetPassword(
   _prev: AuthState,
   formData: FormData,
@@ -123,18 +115,12 @@ export async function resetPassword(
     return { error: "Enter your email to reset your password." };
   }
 
-  const hdrs = await headers();
-  const origin =
-    hdrs.get("origin") ??
-    `https://${hdrs.get("x-forwarded-host") ?? hdrs.get("host")}`;
-
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/reset-password`,
+    redirectTo: `${await requestOrigin()}/reset-password`,
   });
 
-  // Surface rate limits and true configuration failures; keep account
-  // existence private for everything else.
+  // Only rate limits and server failures surface; everything else stays private.
   if (error && error.status === 429) {
     return { error: "Too many requests — give it a minute, then try again." };
   }
@@ -145,11 +131,7 @@ export async function resetPassword(
   return { sent: "reset" };
 }
 
-/**
- * Re-send the sign-up confirmation email. Powers the "Resend" button on the
- * check-your-inbox panel after account creation. Same privacy posture as
- * resetPassword: only rate limits and server failures surface as errors.
- */
+/** Same privacy posture as resetPassword. */
 export async function resendConfirmation(
   _prev: AuthState,
   formData: FormData,
@@ -172,11 +154,7 @@ export async function resendConfirmation(
   return { sent: "confirm" };
 }
 
-/**
- * Set a new password. Runs after the recovery link established a session at
- * /auth/confirm; without that session Supabase rejects the update, which we
- * surface as an expired-link error.
- */
+/** Needs the session /auth/confirm established from the recovery link. */
 export async function updatePassword(
   _prev: AuthState,
   formData: FormData,

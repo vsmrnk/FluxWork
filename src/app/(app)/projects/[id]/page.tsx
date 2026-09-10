@@ -6,17 +6,10 @@ import { ProjectTabs, type ProjectView } from "@/components/ProjectTabs";
 import { OverviewPanel } from "./panels/OverviewPanel";
 import { TasksPanel } from "./panels/TasksPanel";
 import { TimePanel } from "./panels/TimePanel";
+import { getTaskTree } from "./data";
 import { formatMoney } from "@/lib/invoice";
 import { getPlan } from "@/lib/plan";
 
-/**
- * Project workspace — composition root.
- *
- * This file owns only the shell: identity header, the resolved rate/currency
- * every panel shares, and the tab wiring. Each panel fetches its own data and
- * lives in ./panels, so the three workstreams can evolve independently without
- * colliding here.
- */
 export default async function ProjectDetailPage({
   params,
   searchParams,
@@ -26,62 +19,38 @@ export default async function ProjectDetailPage({
 }) {
   const { id } = await params;
   const { view } = await searchParams;
-  // The tab lives in the URL so a refresh or a shared link reopens the same
-  // panel; ProjectTabs keeps it in sync from there without a navigation.
+  // The tab lives in the URL so a refresh or a shared link reopens it.
   const defaultView: ProjectView =
     view === "tasks" || view === "time" ? view : "overview";
 
   const supabase = await createClient();
 
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: project }, { data: clients }, plan, taskTree, { count: entryCount }] =
+    await Promise.all([
+      supabase
+        .from("projects")
+        .select("*, clients(id, name, email, default_rate, currency, tax_label, tax_rate)")
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("clients")
+        .select("id, name")
+        .eq("is_archived", false)
+        .order("name", { ascending: true }),
+      getPlan(supabase),
+      getTaskTree(id),
+      supabase
+        .from("time_entries")
+        .select("id, tasks!inner(project_id)", { count: "exact", head: true })
+        .eq("tasks.project_id", id),
+    ]);
   if (!project) notFound();
 
-  const [
-    { data: clients },
-    { data: linkedClient },
-    plan,
-    { count: taskCount },
-    { count: entryCount },
-    { data: running },
-  ] = await Promise.all([
-    supabase
-      .from("clients")
-      .select("id, name")
-      .eq("is_archived", false)
-      .order("name", { ascending: true }),
-    project.client_id
-      ? supabase
-          .from("clients")
-          .select("id, name, email, default_rate, currency, tax_label, tax_rate")
-          .eq("id", project.client_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    getPlan(supabase),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("project_id", id),
-    supabase
-      .from("time_entries")
-      .select("id, tasks!inner(project_id)", { count: "exact", head: true })
-      .eq("tasks.project_id", id),
-    supabase
-      .from("time_entries")
-      .select("id, tasks!inner(project_id)")
-      .eq("tasks.project_id", id)
-      .is("ended_at", null),
-  ]);
-
-  // The layered rate every panel bills against: project override, then the
-  // client default, then nothing.
+  const linkedClient = project.clients;
+  // Project override, then the client default, then nothing.
   const effectiveRate = project.rate ?? linkedClient?.default_rate ?? null;
   const currency = linkedClient?.currency ?? "USD";
-  const clientOptions = clients ?? [];
-  const runningCount = (running ?? []).length;
+  const { runningCount } = taskTree;
 
   return (
     <div className="page">
@@ -135,13 +104,13 @@ export default async function ProjectDetailPage({
 
       <ProjectTabs
         defaultView={defaultView}
-        counts={{ tasks: taskCount ?? 0, time: entryCount ?? 0 }}
+        counts={{ tasks: taskTree.tasks.length, time: entryCount ?? 0 }}
         overview={
           <OverviewPanel
             projectId={id}
             project={project}
             client={linkedClient}
-            clients={clientOptions}
+            clients={clients ?? []}
             effectiveRate={effectiveRate}
             currency={currency}
             canUseAdvanced={plan.canUseAdvanced}

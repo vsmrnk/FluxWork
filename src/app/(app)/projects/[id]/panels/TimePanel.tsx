@@ -3,9 +3,7 @@ import { ManualEntryForm } from "@/components/ManualEntryForm";
 import { EntryRow } from "@/components/EntryRow";
 import { formatDuration, formatHours } from "@/lib/time";
 import { formatMoney } from "@/lib/invoice";
-import type { Task, TimeEntry } from "@/lib/database.types";
-
-type EntryWithTask = TimeEntry & { tasks: { name: string } | null };
+import { getTaskTree } from "../data";
 
 function fmtTime(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -30,13 +28,6 @@ function dayKey(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/**
- * TIME PANEL — owned by the time-tracking workstream.
- *
- * Self-fetching so it can grow (drag-and-drop rescheduling, timeline/calendar
- * views, split/merge, bulk edit, filters) without touching page.tsx or the
- * other panels.
- */
 export async function TimePanel({
   projectId,
   effectiveRate,
@@ -48,26 +39,18 @@ export async function TimePanel({
 }) {
   const supabase = await createClient();
 
-  const [{ data: entries }, { data: tasks }] = await Promise.all([
+  const [{ data: entries }, { tasks }] = await Promise.all([
     supabase
       .from("time_entries")
       .select("*, tasks!inner(name, project_id)")
       .eq("tasks.project_id", projectId)
       .order("started_at", { ascending: false })
       .limit(100),
-    supabase
-      .from("tasks")
-      .select("id, name")
-      .eq("project_id", projectId)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true }),
+    getTaskTree(projectId),
   ]);
 
-  const entryList = (entries ?? []) as EntryWithTask[];
-  const taskOptions = ((tasks ?? []) as Pick<Task, "id" | "name">[]).map((t) => ({
-    id: t.id,
-    name: t.name,
-  }));
+  const entryList = entries ?? [];
+  const taskOptions = tasks.map((t) => ({ id: t.id, name: t.name }));
   // Pre-select the most recently tracked task when adding time by hand.
   const defaultTaskId = entryList[0]?.task_id;
   const notedCount = entryList.filter((e) => (e.notes ?? "").trim()).length;
@@ -76,7 +59,7 @@ export async function TimePanel({
     key: string;
     label: string;
     seconds: number;
-    rows: EntryWithTask[];
+    rows: typeof entryList;
   }[] = [];
   for (const e of entryList) {
     const key = dayKey(e.started_at);
@@ -136,7 +119,7 @@ export async function TimePanel({
                     entryId={e.id}
                     projectId={projectId}
                     taskId={e.task_id}
-                    taskName={e.tasks?.name ?? "—"}
+                    taskName={e.tasks.name}
                     tasks={taskOptions}
                     startedAtIso={e.started_at}
                     endedAtIso={e.ended_at}

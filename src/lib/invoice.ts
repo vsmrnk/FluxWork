@@ -1,29 +1,18 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
+import type { Supabase } from "@/lib/supabase/server";
 
 /**
- * Invoicing domain logic shared by the server actions.
- *
- * Rate model (layered): a project's effective hourly rate is its own `rate`
- * when set, otherwise the client's `default_rate`, otherwise 0. The effective
- * rate is resolved here at draft time and snapshotted onto each line item so a
- * generated invoice never shifts when rates are later edited.
+ * Rate model: a project's effective hourly rate is its own `rate`, else the
+ * client's `default_rate`, else 0. It is resolved at draft time and
+ * snapshotted onto each line item, so a generated invoice never shifts when
+ * rates are edited later.
  */
 
-export type Supabase = SupabaseClient<Database>;
-
-export type InvoiceLineDraft = {
+type InvoiceLineDraft = {
   taskId: string | null;
   description: string;
   hours: number; // 4dp, from summed billable seconds
-  rate: number; // effective rate, snapshotted
-  amount: number; // round(hours * rate, 2)
-};
-
-export type InvoiceTax = {
-  label: string | null; // e.g. "VAT"; null when no tax configured
-  rate: number; // percentage, e.g. 20 = 20%
-  amount: number; // round2(subtotal * rate / 100)
+  rate: number;
+  amount: number; // round2(hours * rate)
 };
 
 export type InvoiceDraft = {
@@ -36,26 +25,32 @@ export type InvoiceDraft = {
   };
   lines: InvoiceLineDraft[];
   subtotal: number;
-  tax: InvoiceTax;
-  total: number; // subtotal + tax.amount
+  tax: {
+    label: string | null;
+    rate: number; // percentage, e.g. 20 = 20%
+    amount: number;
+  };
+  total: number;
   currency: string;
-  billableHours: number; // sum of line hours
+  billableHours: number;
   entryIds: string[]; // entries to stamp on generate
   periodStart: string | null;
   periodEnd: string | null;
-  /** Actual span of the selected entries (min/max started_at), for display. */
+  /** Actual span of the selected entries (min/max started_at). */
   coveredFrom: string | null;
   coveredTo: string | null;
 };
 
-export type DraftParams = {
-  clientId: string;
-  projectId?: string | null;
-  periodStart?: string | null; // ISO date (inclusive)
-  periodEnd?: string | null; // ISO date (inclusive)
-};
+export const INVOICE_BUCKET = "invoices";
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Five-minute download link for a generated invoice file. */
+export async function signedInvoiceUrl(supabase: Supabase, path: string | null) {
+  if (!path) return null;
+  const { data } = await supabase.storage.from(INVOICE_BUCKET).createSignedUrl(path, 300);
+  return data?.signedUrl ?? null;
+}
+
+export const round2 = (n: number) => Math.round(n * 100) / 100;
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 
 export function formatMoney(amount: number, currency: string): string {
@@ -70,14 +65,34 @@ export function formatMoney(amount: number, currency: string): string {
   }
 }
 
+/** Parses a rate field; empty means null (inherit the client's rate). */
+export function parseRate(
+  raw: FormDataEntryValue | null,
+): { value: number | null } | { error: string } {
+  const s = String(raw ?? "").trim();
+  if (!s) return { value: null };
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0) return { error: "Rate must be a positive number." };
+  return { value: round2(n) };
+}
+
 /**
- * Collect billable, not-yet-invoiced, completed time entries for a client
- * (optionally one project, optionally a date window) and aggregate them into
- * one line item per task with the task's effective rate.
+ * Billable, not-yet-invoiced, completed entries for a client (optionally one
+ * project and an inclusive date window), aggregated into one line per task.
  */
 export async function buildInvoiceDraft(
   supabase: Supabase,
-  { clientId, projectId, periodStart, periodEnd }: DraftParams,
+  {
+    clientId,
+    projectId,
+    periodStart,
+    periodEnd,
+  }: {
+    clientId: string;
+    projectId?: string | null;
+    periodStart?: string | null;
+    periodEnd?: string | null;
+  },
 ): Promise<{ draft: InvoiceDraft } | { error: string }> {
   const { data: client, error: clientErr } = await supabase
     .from("clients")
@@ -88,7 +103,6 @@ export async function buildInvoiceDraft(
   if (clientErr) return { error: clientErr.message };
   if (!client) return { error: "Client not found." };
 
-  // Projects belonging to this client (+ effective rate inputs).
   let projectQuery = supabase
     .from("projects")
     .select("id, name, rate")
@@ -101,14 +115,13 @@ export async function buildInvoiceDraft(
     return { error: "This client has no projects to invoice." };
   }
 
-  const effectiveRate = new Map<string, number>(); // projectId -> rate
+  const effectiveRate = new Map<string, number>();
   const projectName = new Map<string, string>();
   for (const p of projects) {
     effectiveRate.set(p.id, p.rate ?? client.default_rate ?? 0);
     projectName.set(p.id, p.name);
   }
 
-  // Tasks under those projects.
   const projectIds = projects.map((p) => p.id);
   const { data: tasks, error: taskErr } = await supabase
     .from("tasks")
@@ -125,7 +138,6 @@ export async function buildInvoiceDraft(
     return { error: "No billable time available for this client." };
   }
 
-  // Billable, un-invoiced, completed entries in the window.
   let entryQuery = supabase
     .from("time_entries")
     .select("id, task_id, duration_seconds, started_at")
@@ -145,7 +157,6 @@ export async function buildInvoiceDraft(
     return { error: "No billable time to invoice for the selected filters." };
   }
 
-  // Aggregate seconds per task; keep the entry ids for stamping on generate.
   const secondsByTask = new Map<string, number>();
   const entryIds: string[] = [];
   let coveredFrom: string | null = null;
@@ -188,21 +199,14 @@ export async function buildInvoiceDraft(
     return { error: "No billable time to invoice for the selected filters." };
   }
 
-  // Stable order: highest amount first.
   lines.sort((a, b) => b.amount - a.amount);
 
   const subtotal = round2(lines.reduce((a, l) => a + l.amount, 0));
   const billableHours = round2(lines.reduce((a, l) => a + l.hours, 0));
 
-  // Single tax line snapshot: the client's current tax settings applied to the
-  // subtotal. Rate is a percentage; zero-rate / unset ⇒ no tax (amount 0).
+  // One tax line: the client's current tax settings applied to the subtotal.
   const taxRate = client.tax_rate ?? 0;
   const taxAmount = taxRate > 0 ? round2((subtotal * taxRate) / 100) : 0;
-  const tax: InvoiceTax = {
-    label: client.tax_label ?? null,
-    rate: taxRate,
-    amount: taxAmount,
-  };
 
   return {
     draft: {
@@ -215,7 +219,7 @@ export async function buildInvoiceDraft(
       },
       lines,
       subtotal,
-      tax,
+      tax: { label: client.tax_label ?? null, rate: taxRate, amount: taxAmount },
       total: round2(subtotal + taxAmount),
       currency: client.currency,
       billableHours,
@@ -228,26 +232,24 @@ export async function buildInvoiceDraft(
   };
 }
 
-export type UnbilledProjectSummary = { id: string; name: string; amount: number };
-
-export type UnbilledClientSummary = {
+type UnbilledClient = {
   id: string;
   name: string;
   currency: string;
   hours: number;
   amount: number;
   /** Only projects with unbilled billable time, highest amount first. */
-  projects: UnbilledProjectSummary[];
+  projects: { id: string; name: string; amount: number }[];
 };
 
 /**
- * Per-client unbilled summary for the invoice picker. Uses the same entry
- * selection filters and per-task rounding as buildInvoiceDraft, so the amount
- * shown when picking a client equals the previewed subtotal by construction.
+ * Unbilled totals per client, largest first. Uses buildInvoiceDraft's entry
+ * selection and per-task rounding, so each amount equals that client's
+ * invoice subtotal to the cent.
  */
 export async function listUnbilledClients(
   supabase: Supabase,
-): Promise<UnbilledClientSummary[]> {
+): Promise<UnbilledClient[]> {
   const { data: clients } = await supabase
     .from("clients")
     .select("id, name, currency, default_rate")
@@ -307,7 +309,7 @@ export async function listUnbilledClients(
     perClient.set(client.id, acc);
   }
 
-  const result: UnbilledClientSummary[] = [];
+  const result: UnbilledClient[] = [];
   for (const [clientId, acc] of perClient) {
     const client = clientById.get(clientId);
     if (!client) continue;

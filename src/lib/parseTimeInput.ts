@@ -1,16 +1,13 @@
 /**
- * Grammar for the "Add time" smart field (plan §6 Flow 3). One text input
- * accepts a bare duration or a clock range; the same parser runs client-side for
- * instant feedback and server-side to re-validate. Pure module — no directive —
- * so it is safe to import from both a Client Component and a Server Action.
+ * Grammar for the "Add time" field. Runs client-side for instant feedback and
+ * server-side to re-validate, so this module must stay free of directives.
  *
- * Accepted forms:
  *   duration units   2h · 45m · 1h 30m · 1h30m · 1.5h · 90m
  *   duration h:mm    1:30  (→ 1 h 30 m)
  *   clock range      9:30-11:00 · 9-11 · 13:00–14:30  (dash or en/em dash)
  */
 
-export type ParsedTimeInput =
+type ParsedTimeInput =
   | { ok: true; seconds: number; range: { startMinutes: number; endMinutes: number } | null }
   | { ok: false; error: string };
 
@@ -82,8 +79,8 @@ export function parseTimeInput(raw: string): ParsedTimeInput {
   return { ok: false, error: "Try a time like 2h, 1:30, 45m, or 9:30-11:00." };
 }
 
-/** Minutes-since-midnight → "HH:MM" (zero-padded, for datetime-local strings). */
-export function minutesToClock(total: number): string {
+/** Minutes-since-midnight → "HH:MM". */
+function minutesToClock(total: number): string {
   const h = Math.floor(total / 60);
   const m = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;

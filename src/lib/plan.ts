@@ -1,21 +1,15 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
+import type { Supabase } from "@/lib/supabase/server";
 
-type Supabase = SupabaseClient<Database>;
+const FREE_LIMITS = { clients: 5, projects: 5 };
 
-/** Free-tier ceilings (paid tier lifts these to Infinity). */
-export const FREE_LIMITS = { clients: 5, projects: 5 } as const;
-
-export type PlanTier = "free" | "paid";
-
-export type Plan = {
-  tier: PlanTier;
+type Plan = {
+  tier: "free" | "paid";
   /** Raw subscription status: 'free' | 'active' | 'past_due' | 'canceled'. */
   status: string;
   limits: { clients: number; projects: number };
   canInvoice: boolean;
   canExport: boolean;
-  /** Pro-only "Advanced" surfaces: subtasks and custom invoice templates. */
+  /** Subtasks and custom invoice templates. */
   canUseAdvanced: boolean;
 };
 
@@ -29,10 +23,8 @@ const PAID_PLAN: Plan = {
 };
 
 /**
- * Resolve the current user's plan from their `subscriptions` row. RLS scopes the
- * row to the caller, so no explicit user filter is needed. A missing row (or any
- * non-'active' status) is treated as the free tier. Only status 'active' unlocks
- * the paid tier — 'past_due'/'canceled' fall back to free limits.
+ * Only an 'active' subscription unlocks Pro; 'past_due' and 'canceled' fall
+ * back to free. RLS scopes the row to the caller.
  */
 export async function getPlan(supabase: Supabase): Promise<Plan> {
   const { data } = await supabase
@@ -46,28 +38,15 @@ export async function getPlan(supabase: Supabase): Promise<Plan> {
   return {
     tier: "free",
     status,
-    limits: { clients: FREE_LIMITS.clients, projects: FREE_LIMITS.projects },
+    limits: FREE_LIMITS,
     canInvoice: false,
     canExport: false,
     canUseAdvanced: false,
   };
 }
 
-export type PlanUsage = {
-  tier: PlanTier;
-  status: string;
-  clients: { used: number; limit: number };
-  projects: { used: number; limit: number };
-  canInvoice: boolean;
-};
-
-/**
- * Current counts against the plan ceilings — powers the Plan-page meters and the
- * inline counters near create actions (plan §9). Counts every row (archived
- * included) so the numbers match `assertWithinLimit`'s gate exactly. Paid tier
- * reports Infinity limits.
- */
-export async function getPlanUsage(supabase: Supabase): Promise<PlanUsage> {
+/** Counts include archived rows so they match assertWithinLimit exactly. */
+export async function getPlanUsage(supabase: Supabase) {
   const plan = await getPlan(supabase);
   const [{ count: clients }, { count: projects }] = await Promise.all([
     supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -83,31 +62,6 @@ export async function getPlanUsage(supabase: Supabase): Promise<PlanUsage> {
   };
 }
 
-/** Returns an `{ error }` to surface to the UI when the user can't invoice, else null. */
-export async function assertCanInvoice(
-  supabase: Supabase,
-): Promise<{ error: string } | null> {
-  const plan = await getPlan(supabase);
-  return plan.canInvoice
-    ? null
-    : { error: "Invoicing is a paid feature. Upgrade to generate invoices." };
-}
-
-/** Returns an `{ error }` to surface to the UI when the user can't export, else null. */
-export async function assertCanExport(
-  supabase: Supabase,
-): Promise<{ error: string } | null> {
-  const plan = await getPlan(supabase);
-  return plan.canExport
-    ? null
-    : { error: "Exporting is a paid feature. Upgrade to export your data." };
-}
-
-/**
- * Block a create when the user is already at their free-tier ceiling for the
- * given resource. Paid tier (Infinity limit) always passes. Returns `{ error }`
- * to return straight from a Server Action, else null.
- */
 export async function assertWithinLimit(
   supabase: Supabase,
   resource: "clients" | "projects",
@@ -116,10 +70,9 @@ export async function assertWithinLimit(
   const limit = plan.limits[resource];
   if (!Number.isFinite(limit)) return null;
 
-  const { count } =
-    resource === "clients"
-      ? await supabase.from("clients").select("id", { count: "exact", head: true })
-      : await supabase.from("projects").select("id", { count: "exact", head: true });
+  const { count } = await supabase
+    .from(resource)
+    .select("id", { count: "exact", head: true });
 
   if ((count ?? 0) >= limit) {
     return {

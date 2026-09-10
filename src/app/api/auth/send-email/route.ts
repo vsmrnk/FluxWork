@@ -7,14 +7,11 @@ import {
   type SendEmailHookPayload,
 } from "@/lib/authEmail";
 
-// node:crypto (signature verification) requires the Node.js runtime, not Edge.
 export const runtime = "nodejs";
 
 /**
- * Supabase "Send Email" auth hook → Next.js backend. Replaces the former n8n
- * workflow. Verifies the Standard Webhooks signature, renders a branded email,
- * and delivers it via Resend. Returning non-200 makes Supabase abort the auth
- * action, so misconfiguration fails loudly rather than silently dropping mail.
+ * Supabase "Send Email" auth hook → Resend. A non-200 makes Supabase abort the
+ * auth action, so misconfiguration fails loudly instead of dropping mail.
  */
 export async function POST(request: NextRequest) {
   const secret = process.env.AUTH_EMAIL_HOOK_SECRET;

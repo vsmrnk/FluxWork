@@ -3,17 +3,17 @@
 // reuses an existing product/price with the same name/shape instead of
 // duplicating. Prints the price id to drop into NEXT_PUBLIC_PADDLE_PRICE_ID.
 //
-//   PADDLE_API_KEY=pdl_... [PADDLE_ENV=sandbox|production] node scripts/paddle-setup.mjs
+//   npm run paddle:setup   (PADDLE_API_KEY and NEXT_PUBLIC_PADDLE_ENV from .env.local)
 //
-// PADDLE_ENV defaults to "sandbox". The API key must match that environment
-// (sandbox keys start pdl_sdbx_, live keys pdl_live_).
+// The key must match the environment: pdl_sdbx_… for sandbox, pdl_live_… for
+// production. The environment defaults to sandbox.
 
 const PRODUCT_NAME = "FluxWork Pro";
 const PRICE_DESCRIPTION = "FluxWork Pro — monthly";
 const UNIT_PRICE = { amount: "900", currency_code: "USD" }; // $9.00 / month
 
 const apiKey = process.env.PADDLE_API_KEY;
-const env = process.env.PADDLE_ENV ?? "sandbox";
+const env = process.env.NEXT_PUBLIC_PADDLE_ENV ?? "sandbox";
 if (!apiKey) {
   console.error("Missing PADDLE_API_KEY.");
   process.exit(1);

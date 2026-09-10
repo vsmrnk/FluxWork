@@ -2,18 +2,8 @@ import { escapeHtml, renderEmailShell } from "@/lib/emailShell";
 import { formatMoney } from "@/lib/invoice";
 import { formatClock } from "@/lib/time";
 
-/**
- * Weekly digest email (UX rework §2 — the weekly review, delivered). Answers the
- * four review questions in one glance: what you earned, what you tracked, the
- * billable split, and what's still unbilled. Built on the shared branded shell
- * (emailShell.ts) so it matches the auth emails' logo, palette, and frame.
- *
- * Money always carries its currency (formatMoney); durations are h:mm
- * (formatClock) — plan §8.
- */
-
 export type DigestData = {
-  /** Human label for the window, e.g. "Jul 14 – Jul 20". */
+  /** e.g. "Jul 14 – Jul 20". */
   periodLabel: string;
   currency: string;
   earnings: number;
@@ -21,9 +11,7 @@ export type DigestData = {
   billableSeconds: number;
   nonBillableSeconds: number;
   unbilledTotal: number;
-  unbilledCurrency: string;
   topProject: { name: string; seconds: number } | null;
-  /** App origin for the CTA (AUTH_EMAIL_SITE_URL). */
   appUrl: string;
 };
 
@@ -51,7 +39,6 @@ export function renderDigestEmail(data: DigestData): { subject: string; html: st
     billableSeconds,
     nonBillableSeconds,
     unbilledTotal,
-    unbilledCurrency,
     topProject,
     appUrl,
   } = data;
@@ -76,7 +63,7 @@ export function renderDigestEmail(data: DigestData): { subject: string; html: st
       "Billable",
       `${escapeHtml(formatClock(billableSeconds))} <span style="color:${INK3};font-weight:400;">· ${billPct}%</span>`,
     ),
-    statRow("Unbilled", escapeHtml(formatMoney(unbilledTotal, unbilledCurrency))),
+    statRow("Unbilled", escapeHtml(formatMoney(unbilledTotal, currency))),
     topProject
       ? statRow(
           "Top project",

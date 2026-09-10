@@ -2,54 +2,29 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { parseRate } from "@/lib/invoice";
 import { assertWithinLimit } from "@/lib/plan";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  return { supabase, user };
-}
-
-/** Parse a money field into a non-negative number or null (null = inherit client rate). */
-function parseRate(raw: FormDataEntryValue | null): number | null | { error: string } {
-  const s = String(raw ?? "").trim();
-  if (!s) return null;
-  const n = Number(s);
-  if (!Number.isFinite(n) || n < 0) return { error: "Rate must be a positive number." };
-  return Math.round(n * 100) / 100;
-}
+import { requireUser } from "@/lib/supabase/server";
 
 export async function createProject(formData: FormData) {
   const { supabase, user } = await requireUser();
 
-  // Free-tier cap: block creating a 6th project until upgraded.
   const limitErr = await assertWithinLimit(supabase, "projects");
   if (limitErr) return limitErr;
 
   const name = String(formData.get("name") ?? "").trim();
-  // Legacy free-text client is still accepted; client_id is the linked record.
-  const client = String(formData.get("client") ?? "").trim() || null;
-  const clientId = String(formData.get("client_id") ?? "").trim() || null;
-  const code = String(formData.get("code") ?? "").trim() || null;
-  const color = String(formData.get("color") ?? "").trim() || "#111111";
-
   if (!name) return { error: "Project name is required." };
 
   const rate = parseRate(formData.get("rate"));
-  if (rate && typeof rate === "object") return rate;
+  if ("error" in rate) return rate;
 
   const { error } = await supabase.from("projects").insert({
     user_id: user.id,
     name,
-    client,
-    client_id: clientId,
-    rate: rate as number | null,
-    code,
-    color,
+    client_id: String(formData.get("client_id") ?? "").trim() || null,
+    rate: rate.value,
+    code: String(formData.get("code") ?? "").trim() || null,
+    color: String(formData.get("color") ?? "").trim() || "#111111",
   });
 
   if (error) return { error: error.message };
@@ -58,10 +33,7 @@ export async function createProject(formData: FormData) {
   return { ok: true };
 }
 
-/**
- * Set a project's billing link + rate override. `rate` null means the project
- * inherits the client's default_rate; `clientId` null detaches the client.
- */
+/** A null `rate` inherits the client's default_rate; a null `clientId` detaches it. */
 export async function updateProjectBilling(
   projectId: string,
   clientId: string | null,
@@ -70,11 +42,11 @@ export async function updateProjectBilling(
   const { supabase } = await requireUser();
 
   const rate = parseRate(formData.get("rate"));
-  if (rate && typeof rate === "object") return rate;
+  if ("error" in rate) return rate;
 
   const { error } = await supabase
     .from("projects")
-    .update({ client_id: clientId, rate: rate as number | null })
+    .update({ client_id: clientId, rate: rate.value })
     .eq("id", projectId);
 
   if (error) return { error: error.message };

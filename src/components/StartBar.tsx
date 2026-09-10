@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   quickStart,
   startTimer,
@@ -54,10 +48,9 @@ export type PickerData = {
 type ActionResult = { error?: string } | { ok: true } | void;
 
 /**
- * The Start bar — the timer as a control, never a status display (plan §5).
- * Idle it is one big "Start working on…" button; running it keeps the live
- * duration/earnings dock. Both states open the same quick-picker (Ctrl/⌘K),
- * and the mobile bottom tab bar's center button drives the same state.
+ * Idle it is one "Start working on…" button; running it shows the live
+ * duration and earnings. Both open the quick-picker (Ctrl/⌘K), as does the
+ * mobile tab bar's center button.
  */
 export function StartBar({
   running,
@@ -263,16 +256,15 @@ function QuickPicker({
   }, []);
 
   const q = query.trim().toLowerCase();
-  const results = useMemo(() => {
-    if (!q) return picker.recent;
-    return picker.tasks
-      .filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.projectName.toLowerCase().includes(q),
-      )
-      .slice(0, 12);
-  }, [q, picker]);
+  const results = q
+    ? picker.tasks
+        .filter(
+          (t) =>
+            t.name.toLowerCase().includes(q) ||
+            t.projectName.toLowerCase().includes(q),
+        )
+        .slice(0, 12)
+    : picker.recent;
 
   const showCreate = q.length > 0 && results.length === 0;
   const count = showCreate ? 1 : results.length;
@@ -399,11 +391,8 @@ function QuickPicker({
   );
 }
 
-/**
- * Fixed bottom tabs on small screens with a raised center Start/Stop —
- * the daily loop kept thumb-reachable (plan F7). Rendered outside the
- * backdrop-blur wrapper so position:fixed stays viewport-relative.
- */
+// Rendered outside the backdrop-blur wrapper so position:fixed stays
+// viewport-relative.
 function MobileTabs({
   running,
   pending,

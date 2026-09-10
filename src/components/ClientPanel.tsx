@@ -23,13 +23,6 @@ type Props = {
   taxLabel: string | null;
 };
 
-/**
- * The project's billing context as a first-class rail card, replacing the
- * collapsed <details> that used to sit below the fold. It answers the three
- * questions this page is actually asked — who is this for, what does it earn,
- * and can I invoice it yet — and keeps editing one click away without letting
- * a config form outrank the daily-use task board.
- */
 export function ClientPanel({
   projectId,
   clients,

@@ -4,28 +4,15 @@ import {
   View,
   Text,
   StyleSheet,
-  Font,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import fs from "node:fs";
-import path from "node:path";
 import { formatMoney, type InvoiceDraft } from "@/lib/invoice";
 
-/**
- * Native invoice PDF generation — renders directly from the invoice draft data
- * using @react-pdf/renderer (pure JS, runs in the Node server action; Next 16
- * auto-externalizes the package). This replaces the previous DOCX→PDF round-trip
- * through the n8n/Gotenberg webhook: no external service, no network dependency.
- *
- * The DOCX path (docx.ts / defaultTemplate.ts) is unchanged and still produces
- * the editable format. This module owns the send-to-client PDF.
- *
- * Fonts: if the brand TTFs are present under src/assets/fonts they are embedded;
- * otherwise we fall back to the PDF standard 14 faces. Colours (below) already
- * carry the FluxWork identity either way.
- */
+// Built-in PDF faces: nothing to embed or fetch at render time.
+const SERIF = "Times-Roman";
+const SANS = "Helvetica";
+const MONO = "Courier";
 
-// ── Brand palette (mirrors globals.css, tuned for white invoice paper) ──────
 const C = {
   ink: "#0f1a1c",
   muted: "#566468",
@@ -33,50 +20,8 @@ const C = {
   line: "#dce2e1",
   lineStrong: "#c7d0cf",
   teal: "#0e5c63",
-  green: "#176048", // billable / money
-  tealTint: "#eef4f4",
+  green: "#176048",
 } as const;
-
-// ── Fonts: embed brand TTFs when available, else standard faces ─────────────
-const FONT_DIR = path.join(process.cwd(), "src", "assets", "fonts");
-
-function registerIfPresent(
-  family: string,
-  fonts: { file: string; fontWeight?: number; fontStyle?: "italic" }[],
-  fallback: string,
-): string {
-  try {
-    const resolved = fonts.map((f) => ({
-      src: path.join(FONT_DIR, f.file),
-      fontWeight: f.fontWeight,
-      fontStyle: f.fontStyle,
-    }));
-    if (!resolved.every((f) => fs.existsSync(f.src))) return fallback;
-    Font.register({ family, fonts: resolved });
-    return family;
-  } catch {
-    return fallback;
-  }
-}
-
-const SERIF = registerIfPresent(
-  "InstrumentSerif",
-  [{ file: "InstrumentSerif-Regular.ttf" }],
-  "Times-Roman",
-);
-const SANS = registerIfPresent(
-  "HankenGrotesk",
-  [
-    { file: "HankenGrotesk-Regular.ttf" },
-    { file: "HankenGrotesk-SemiBold.ttf", fontWeight: 600 },
-  ],
-  "Helvetica",
-);
-const MONO = registerIfPresent(
-  "IBMPlexMono",
-  [{ file: "IBMPlexMono-Regular.ttf" }],
-  "Courier",
-);
 
 const styles = StyleSheet.create({
   page: {

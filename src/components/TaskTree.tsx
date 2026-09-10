@@ -32,7 +32,7 @@ function Row({
   node: TaskNode;
   depth: number;
   projectId: string;
-  // Pro-only affordance (plan §3.4 D1). Existing subtasks still render for all.
+  // Pro-only; existing subtasks still render for everyone.
   canAddSubtasks: boolean;
   /** Management view: expose rename. The overview board stays read-mostly. */
   manage: boolean;

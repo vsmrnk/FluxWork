@@ -1,19 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPlan } from "@/lib/plan";
-import { formatMoney } from "@/lib/invoice";
+import { formatMoney, round2 } from "@/lib/invoice";
 import { formatClock } from "@/lib/time";
 import { REPORT_RANGES, resolveRange } from "@/lib/reports";
 
 const first = (v: string | string[] | undefined) =>
   (Array.isArray(v) ? v[0] : v)?.trim() || null;
-
-/** Unwrap a Supabase embedded to-one relation. */
-function one<T>(rel: unknown): T | undefined {
-  return (Array.isArray(rel) ? rel[0] : rel) as T | undefined;
-}
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 type ProjectRow = {
   id: string;
@@ -46,7 +39,7 @@ export default async function ReportsPage({
     supabase
       .from("time_entries")
       .select(
-        "duration_seconds, is_billable, tasks!inner(projects!inner(id, name, rate, client_id, clients(id, name, default_rate, currency)))",
+        "duration_seconds, is_billable, tasks!inner(projects!inner(id, name, rate, clients(id, name, default_rate, currency)))",
       )
       .gte("started_at", range.start.toISOString())
       .lt("started_at", range.end.toISOString())
@@ -102,7 +95,6 @@ export default async function ReportsPage({
     </div>
   );
 
-  // Empty state (plan §8): one sentence + one button back to the loop.
   if (rows.length === 0) {
     return (
       <div className="page">
@@ -127,21 +119,8 @@ export default async function ReportsPage({
   let totalBillableSeconds = 0;
 
   for (const e of rows) {
-    const task = one<{ projects: unknown }>(e.tasks);
-    const project = one<{
-      id: string;
-      name: string;
-      rate: number | null;
-      client_id: string | null;
-      clients: unknown;
-    }>(task?.projects);
-    if (!project) continue;
-    const client = one<{
-      id: string;
-      name: string;
-      default_rate: number | null;
-      currency: string;
-    }>(project.clients);
+    const project = e.tasks.projects;
+    const client = project.clients;
 
     const seconds = e.duration_seconds ?? 0;
     const rate = project.rate ?? client?.default_rate ?? 0;
@@ -189,7 +168,7 @@ export default async function ReportsPage({
   const clientRows = [...byClient.values()].sort(
     (a, b) => b.earnings - a.earnings || b.seconds - a.seconds,
   );
-  // Mixed currencies are grouped, never summed across (plan §8).
+  // Mixed currencies are listed separately, never summed.
   const earnings = [...earningsByCurrency.entries()]
     .map(([currency, amount]) => ({ currency, amount: round2(amount) }))
     .sort((a, b) => b.amount - a.amount);
